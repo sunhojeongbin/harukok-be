@@ -1,0 +1,112 @@
+import { spawnSync } from 'node:child_process';
+import * as path from 'node:path';
+import { decide } from '../../.claude/hooks/pre-bash-guard.cjs';
+
+const dir = '/tmp/harukok-proj';
+const hook = path.join(
+  __dirname,
+  '..',
+  '..',
+  '.claude',
+  'hooks',
+  'pre-bash-guard.cjs',
+);
+
+const run = (command: string) =>
+  decide(
+    { tool_name: 'Bash', tool_input: { command } },
+    { projectDir: dir, home: '/home/u' },
+  );
+const expectBlocked = (c: string) => expect(run(c).allow).toBe(false);
+const expectAllowed = (c: string) => expect(run(c).allow).toBe(true);
+
+describe('pre-bash-guard decide', () => {
+  it.each([
+    'git push --force',
+    'git push -f origin main',
+    'git push origin main --force-with-lease',
+    'git push origin +main',
+    'git -C . push -f',
+    'git reset --hard HEAD~1',
+    'git clean -fd',
+    'cd src && rm -rf /',
+    'rm -rf ~',
+    'rm -fr ..',
+    'rm -rf /tmp/other',
+    `rm -rf ${dir}`,
+    'rm -rf .git',
+    'rm --recursive --force /*',
+    'rm -rf $HOME',
+    'true; dropdb harukok_dev',
+    'createdb harukok_dev',
+    'psql -c "DROP DATABASE harukok_dev"',
+    'psql -h db.example.com -d harukok_dev',
+    'psql -hdb.example.com harukok_dev',
+    'psql postgresql://u@10.0.0.5/harukok_test',
+    'psql "host=db.example.com dbname=x"',
+    'PGHOST=db.example.com psql -d x',
+    'echo hi | bash -c "git push -f"',
+    'cat .env',
+    'grep KEY .env.local',
+    'source ./.env',
+    'cat < .env',
+  ])('차단: %s', (c) => expectBlocked(c));
+
+  it.each([
+    'npm run verify',
+    'git push -u origin feat/todos',
+    'git push --set-upstream origin x',
+    'rm -rf dist',
+    'rm -rf node_modules/.cache',
+    `rm -rf ${dir}/dist`,
+    'rm file.txt',
+    'dropdb harukok_check',
+    'createdb harukok_check',
+    'psql -h localhost -d harukok_dev -c "select 1"',
+    'psql postgresql://u@127.0.0.1/harukok_dev',
+    'cat .env.example',
+    'git commit -m "fix: rm -rf 문구가 들어간 메시지"',
+    'echo "a && rm -rf /"',
+  ])('허용: %s', (c) => expectAllowed(c));
+
+  it('Bash 가 아닌 도구나 빈 명령은 허용한다', () => {
+    expect(
+      decide({ tool_name: 'Read', tool_input: {} }, { projectDir: dir }).allow,
+    ).toBe(true);
+    expect(
+      decide({ tool_name: 'Bash', tool_input: {} }, { projectDir: dir }).allow,
+    ).toBe(true);
+  });
+});
+
+describe('pre-bash-guard 실행', () => {
+  const spawn = (input: string) =>
+    spawnSync('node', [hook], {
+      input,
+      encoding: 'utf8',
+      env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+    });
+
+  it('차단 시 exit 2 와 stderr 사유', () => {
+    const r = spawn(
+      JSON.stringify({
+        tool_name: 'Bash',
+        tool_input: { command: 'git push --force' },
+      }),
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('force');
+  });
+  it('허용 시 exit 0', () => {
+    expect(
+      spawn(
+        JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }),
+      ).status,
+    ).toBe(0);
+  });
+  it('파싱 불가 입력은 스택 트레이스 없이 exit 2', () => {
+    const r = spawn('{');
+    expect(r.status).toBe(2);
+    expect(r.stderr).not.toMatch(/\n\s+at \S/);
+  });
+});
