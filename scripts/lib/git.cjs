@@ -2,6 +2,14 @@
 
 const { spawnSync } = require('node:child_process');
 
+/** 사용자 git 설정(색·외부 diff·접두사)에 출력 형식이 흔들리지 않게 하는 diff 옵션. */
+const DIFF_FLAGS = [
+  '--no-color',
+  '--no-ext-diff',
+  '--src-prefix=a/',
+  '--dst-prefix=b/',
+];
+
 /** git 을 셸 없이 실행한다. */
 function run(args, cwd) {
   return spawnSync('git', ['-c', 'core.quotepath=false', ...args], {
@@ -38,4 +46,11 @@ function mergeBase(base, cwd) {
   return out || base;
 }
 
-module.exports = { run, mergeBase, refExists, fileInRef, defaultBase };
+module.exports = {
+  DIFF_FLAGS,
+  run,
+  mergeBase,
+  refExists,
+  fileInRef,
+  defaultBase,
+};

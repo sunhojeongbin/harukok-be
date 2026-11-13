@@ -44,6 +44,31 @@ describe('findViolations', () => {
     ).toHaveLength(1),
   );
 
+  it.each([
+    ['it', 'concurrent', 'skip'],
+    ['it', 'concurrent', 'only'],
+    ['test', 'concurrent', 'skip'],
+    ['test', 'concurrent', 'only'],
+  ])('concurrent 우회 %s.%s.%s', (n, c, m) => {
+    for (const tail of ['(', '.each(', '.each`'])
+      expect(
+        findViolations({
+          deleted: [],
+          added: [{ file: 'src/a.spec.ts', line: `${n}.${c}.${m}${tail}'x'` }],
+        }),
+      ).toHaveLength(1);
+  });
+  it('정상 concurrent 는 허용한다', () => {
+    expect(
+      findViolations({
+        deleted: [],
+        added: [
+          { file: 'src/a.spec.ts', line: "it.concurrent('x', () => {});" },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
   const head = (name: string, mod?: string): string =>
     `${name}${mod ? `.${mod}` : ''}.each`;
 

@@ -1,3 +1,4 @@
+export declare const DIFF_FLAGS: string[];
 export declare function run(
   args: string[],
   cwd: string,
