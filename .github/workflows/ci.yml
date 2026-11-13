@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # 잡 이름 `ci` 는 main 보호의 필수 상태 검사 이름이다. 바꾸지 않는다.
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integrity -- --base origin/${{ github.base_ref || 'main' }}
+      # TODO(0단위): PostgreSQL 18 서비스 컨테이너, `npm run db:check`, `npm run test:e2e` 단계를 여기에 추가한다.
