@@ -38,6 +38,14 @@ describe('pre-edit-guard decide', () => {
     expect(r.allow).toBe(false);
     expect('reason' in r && r.reason).toContain('노션');
   });
+  it('루프가 훅을 끄거나 게이트 로직을 고치지 못하게 보호한다', () => {
+    expectBlocked({ file_path: `${dir}/.claude/settings.local.json` });
+    expectBlocked({ file_path: `${dir}/scripts/lib/git.cjs` });
+    expectBlocked({ file_path: `${dir}/scripts/lib/sub/x.cjs` });
+    expectBlocked({ file_path: `${dir}/scripts/check-test-integrity.cjs` });
+    expectAllowed({ file_path: `${dir}/scripts/db-migrate.cjs` });
+    expectAllowed({ file_path: `${dir}/scripts/db-setup.cjs` });
+  });
   it('.env 계열은 차단, .env.example 은 허용', () => {
     expectBlocked({ file_path: `${dir}/.env` });
     expectBlocked({ file_path: `${dir}/.env.local` });

@@ -39,10 +39,13 @@ function decide(input, ctx = {}) {
   }
   if (
     posix === '.claude/settings.json' ||
+    posix === '.claude/settings.local.json' ||
+    posix === 'scripts/check-test-integrity.cjs' ||
+    (parts[0] === 'scripts' && parts[1] === 'lib') ||
     (parts[0] === '.claude' && parts[1] === 'hooks')
   ) {
     return deny(
-      `차단: ${posix} — 루프가 자기 검증 장치(훅·설정)를 바꾸지 못하게 막습니다.`,
+      `차단: ${posix} — 루프가 자기 검증 장치(훅·설정·게이트 로직)를 바꾸지 못하게 막습니다.`,
     );
   }
   if (
