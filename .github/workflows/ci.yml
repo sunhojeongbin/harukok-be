@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   # 잡 이름 `ci` 는 main 보호의 필수 상태 검사 이름이다. 바꾸지 않는다.
   ci:

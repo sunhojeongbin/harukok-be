@@ -8,7 +8,7 @@ function git(cwd: string, ...args: string[]): string {
   return execFileSync(
     'git',
     ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args],
-    { cwd, encoding: 'utf8' },
+    { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   );
 }
 
@@ -50,7 +50,7 @@ describe('git 헬퍼', () => {
     const remote = mk();
     git(remote, 'init', '--bare', '-b', 'main');
     git(d, 'remote', 'add', 'origin', remote);
-    git(d, 'push', '-u', 'origin', 'main');
+    git(d, 'push', '-q', '-u', 'origin', 'main');
     expect(defaultBase(d)).toBe('origin/main');
   });
 

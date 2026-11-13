@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -114,5 +115,37 @@ describe('post-edit-format', () => {
     });
     expect(r).toEqual({ ok: true });
     expect(seen).toEqual([]);
+  });
+
+  it('기본 실행기는 npx --no-install 로 로컬 도구만 쓴다', () => {
+    const bin = path.join(dir, 'bin');
+    const log = path.join(dir, 'calls.log');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(
+      path.join(bin, 'npx'),
+      `#!/bin/sh\necho "$@" >> '${log}'\n`,
+      { mode: 0o755 },
+    );
+    const f = touch('src/a.ts');
+    const hook = path.resolve(
+      __dirname,
+      '../../.claude/hooks/post-edit-format.cjs',
+    );
+    const res = spawnSync('node', [hook], {
+      input: JSON.stringify({
+        tool_name: 'Edit',
+        tool_input: { file_path: f },
+      }),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: dir,
+        PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}`,
+      },
+    });
+    expect(res.status).toBe(0);
+    const logged = fs.readFileSync(log, 'utf8').trim().split('\n');
+    expect(logged).toHaveLength(2);
+    for (const c of logged) expect(c.startsWith('--no-install ')).toBe(true);
   });
 });

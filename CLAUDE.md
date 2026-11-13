@@ -63,9 +63,11 @@
 - 수정 직후 훅(`post-edit-format.cjs`): 수정 파일에 eslint --fix + prettier. 남은 eslint 오류가 있으면 차단 → 즉시 수정
 - 종료 훅(`stop-verify.cjs`): `npm run verify:fast` 실행. 실패하면 "검증 실패 (n/3)" 으로 종료 차단
 - 3회 연속 실패하면 차단을 풀고 `.claude/state/STUCK-<세션>.md` 를 남긴다 → 아래 "막혔을 때" 로 이동
-- 편집 차단: `docs/spec/**`, `.env`·`.env.*`(`.env.example` 제외), `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**`, `scripts/lib/**`, `scripts/check-test-integrity.cjs`, `origin/main` 에 있는 `migrations/*.sql`
-- Bash 차단: 6장의 위험 명령, `.env` 읽기
-- 훅·차단 규칙은 우회하지 않는다. 차단되면 규칙을 지키는 다른 방법을 찾는다
+- 편집 차단: `docs/spec/**`, `.env`·`.env.*`(`.env.example` 제외), `.claude/settings.json`, `.claude/settings.local.json`, `.claude/hooks/**`, `.claude/state/**`, `.github/workflows/**`, `scripts/lib/**`, `scripts/check-test-integrity.cjs`, `origin/main` 에 있는 `migrations/*.sql` (대소문자 구분 없이 판정)
+- Bash 차단: 6장의 위험 명령, `.env` 읽기, 위 보호 경로에 대한 Bash 쓰기(`rm`·`mv`·`cp`·`sed -i`·`tee`·`>` 리다이렉션·`git checkout/restore` 등)
+- 가드는 최선의 방어선일 뿐이다. 우회하지 않는다. 차단되면 규칙을 지키는 다른 방법을 찾는다
+- 게이트 설정(`package.json` 검증 스크립트, `jest.config.js`, `eslint.config.mjs`, `tsconfig*.json`, `.prettierrc` 등)을 바꾸면 `test:integrity` 가 경고한다. PR 본문에 바꾼 이유를 적는다
+- 마이그레이션 001·005 에서 결함을 발견하면 멈추고 보고한다. 사람이 직접 수정한다
 
 ## 8. 루프 절차 (한 작업 단위)
 

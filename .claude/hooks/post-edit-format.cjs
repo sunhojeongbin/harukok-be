@@ -35,9 +35,12 @@ function targetsFor(filePath, root) {
   return { eslint: ESLINT_EXT.includes(ext), prettier: true };
 }
 
-/** npx <args> 를 셸 없이 실행한다. */
+/** npx --no-install <args> 를 셸 없이 실행한다 (없는 패키지를 내려받지 않는다). */
 function defaultRunner(args, cwd) {
-  const r = spawnSync('npx', args, { cwd, encoding: 'utf8' });
+  const r = spawnSync('npx', ['--no-install', ...args], {
+    cwd,
+    encoding: 'utf8',
+  });
   return {
     status: r.status,
     output: `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? r.error.message : ''}`,
