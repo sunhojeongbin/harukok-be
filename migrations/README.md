@@ -16,8 +16,10 @@
 
 ## 적용 명령
 
-```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/20261110_001__init_schema.sql
-```
+| 명령                  | 대상                   | 동작                                                                      |
+| --------------------- | ---------------------- | ------------------------------------------------------------------------- |
+| `npm run db:migrate`  | `DATABASE_URL`         | 미적용분을 버전 순으로 적용, `schema_migrations` 에 기록                  |
+| `npm run db:rollback` | `TEST_DATABASE_URL`    | 마지막 1개를 `.down.sql` 로 롤백                                          |
+| `npm run db:check`    | `harukok_check` (임시) | 생성 → 전체 적용 → 전체 롤백(잔여 객체 0) → 재적용(첫 적용과 동일) → 삭제 |
 
-롤백도 같은 방식으로 `.down.sql` 을 지정한다. 파괴적 작업은 `harukok_test`, `harukok_check` 에서만 허용된다 (`scripts/lib/db-guard.cjs`).
+실행기는 `scripts/db-migrate.cjs` 이고 Node `pg` 로 파일 내용을 그대로 보낸다(각 파일이 자체 `BEGIN`/`COMMIT` 을 가진다). 파괴적 작업은 `harukok_test`, `harukok_check` 에서만 허용된다 (`scripts/lib/db-guard.cjs`).

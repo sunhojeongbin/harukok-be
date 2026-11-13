@@ -1,26 +1,10 @@
 'use strict';
 // 로컬 개발/테스트 DB 생성 스크립트. 생성만 하고 삭제는 하지 않는다.
-// .env 의 DATABASE_URL, TEST_DATABASE_URL 을 읽는다 (의존성 없음).
-const fs = require('node:fs');
+// DATABASE_URL, TEST_DATABASE_URL 을 .env 또는 환경변수(CI)에서 읽는다 (의존성 없음).
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { loadEnv } = require('./env.cjs');
 const { isLocalHost, parseDbTarget } = require('./lib/db-guard.cjs');
-
-function parseEnv(file) {
-  const env = {};
-  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === '' || line.startsWith('#')) continue;
-    const eq = line.indexOf('=');
-    if (eq < 0) continue;
-    const key = line.slice(0, eq).trim();
-    let value = line.slice(eq + 1).trim();
-    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
-    else value = value.replace(/\s+#.*$/, '');
-    env[key] = value;
-  }
-  return env;
-}
 
 function fail(msg) {
   console.error(msg);
@@ -41,16 +25,12 @@ function adminUrl(url) {
 }
 
 function main() {
-  const envFile = path.join(__dirname, '..', '.env');
-  if (!fs.existsSync(envFile)) {
-    fail(
-      '.env 가 없습니다. `cp .env.example .env` 후 사용자 이름을 수정하세요.',
-    );
-  }
-  const env = parseEnv(envFile);
+  const env = loadEnv(path.join(__dirname, '..'));
   const urls = [env.DATABASE_URL, env.TEST_DATABASE_URL];
   if (urls.some((u) => !u))
-    fail('.env 에 DATABASE_URL 과 TEST_DATABASE_URL 이 필요합니다.');
+    fail(
+      'DATABASE_URL 과 TEST_DATABASE_URL 이 필요합니다. `cp .env.example .env` 후 사용자 이름을 수정하세요.',
+    );
 
   const targets = urls.map((u) => {
     try {
