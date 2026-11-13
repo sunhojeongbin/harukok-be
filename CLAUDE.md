@@ -9,19 +9,20 @@
 
 ## 2. 명령어
 
-| 명령                                                              | 용도                                                         |
-| ----------------------------------------------------------------- | ------------------------------------------------------------ |
-| `npm run lint` / `npm run lint:fix`                               | ESLint 검사 / 자동 수정                                      |
-| `npm run format` / `npm run format:check`                         | Prettier 적용 / 검사                                         |
-| `npm run typecheck`                                               | 타입 검사                                                    |
-| `npm run test`                                                    | 단위 테스트                                                  |
-| `npm run test:e2e`                                                | DB 통합 테스트                                               |
-| `npm run test:integrity`                                          | 테스트 약화 감지 (G6)                                        |
-| `npm run db:setup`                                                | 로컬 DB 생성                                                 |
-| `npm run db:migrate` / `npm run db:rollback` / `npm run db:check` | 마이그레이션 적용 / 되돌리기 / 왕복 검증 (0단위 전까지 스텁) |
-| `npm run verify:fast`                                             | lint + format + typecheck + test + integrity                 |
-| `npm run verify`                                                  | verify:fast + db:check + test:e2e (완료 기준)                |
-| `npm run build` / `npm run start:dev`                             | 빌드 / 개발 서버                                             |
+| 명령                                                              | 용도                                                |
+| ----------------------------------------------------------------- | --------------------------------------------------- |
+| `npm run lint` / `npm run lint:fix`                               | ESLint 검사 / 자동 수정                             |
+| `npm run format` / `npm run format:check`                         | Prettier 적용 / 검사                                |
+| `npm run typecheck`                                               | 타입 검사                                           |
+| `npm run test`                                                    | 단위 테스트                                         |
+| `npm run test:e2e`                                                | DB 통합 테스트                                      |
+| `npm run test:integrity`                                          | 테스트 약화 감지 (G6)                               |
+| `npm run db:setup`                                                | 로컬 DB 생성                                        |
+| `npm run db:migrate` / `npm run db:rollback` / `npm run db:check` | 마이그레이션 적용(dev) / 되돌리기(test) / 왕복 검증 |
+| `npm run db:seed`                                                 | 로컬 dev DB 에 임시 데이터(약관) 넣기. 운영 금지    |
+| `npm run verify:fast`                                             | lint + format + typecheck + test + integrity        |
+| `npm run verify`                                                  | verify:fast + db:check + test:e2e (완료 기준)       |
+| `npm run build` / `npm run start:dev`                             | 빌드 / 개발 서버                                    |
 
 ## 3. 폴더 구조 · 모듈 규칙
 

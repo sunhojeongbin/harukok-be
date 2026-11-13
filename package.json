@@ -25,6 +25,7 @@
     "db:migrate": "node scripts/db-migrate.cjs up",
     "db:rollback": "node scripts/db-migrate.cjs down --test",
     "db:check": "node scripts/db-migrate.cjs check",
+    "db:seed": "node scripts/db-seed.cjs",
     "verify:fast": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run test:integrity",
     "verify": "npm run verify:fast && npm run db:check && npm run test:e2e"
   },
