@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+.superpowers
+package-lock.json
+docs/spec/**
+docs/superpowers/**
