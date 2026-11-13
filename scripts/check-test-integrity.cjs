@@ -8,7 +8,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { run, defaultBase, refExists } = require('./lib/git.cjs');
+const { run, defaultBase, refExists, mergeBase } = require('./lib/git.cjs');
 const { isTestFile, findViolations } = require('./lib/test-integrity.cjs');
 
 function parseBase(argv) {
@@ -41,7 +41,8 @@ function collect(cwd, base) {
     let file = null;
     for (const row of diff.stdout.split('\n')) {
       if (row.startsWith('+++ ')) {
-        file = row === '+++ /dev/null' ? null : row.slice(6);
+        file =
+          row === '+++ /dev/null' ? null : row.slice(6).replace(/\t.*$/, '');
       } else if (row.startsWith('+') && file) {
         added.push({ file, line: row.slice(1) });
       }
@@ -69,7 +70,10 @@ function main() {
     fail('--base 에 ref 가 필요합니다');
   if (arg !== undefined && !refExists(arg, cwd))
     fail(`base ref 를 찾을 수 없습니다: ${arg}`);
-  const base = arg !== undefined ? arg : defaultBase(cwd);
+  const picked = arg !== undefined ? arg : defaultBase(cwd);
+  // 뒤처진 브랜치가 앞선 base 의 새 테스트를 '삭제'로 오탐하지 않도록 공통 조상과 비교한다.
+  const base =
+    picked !== null && picked !== 'HEAD' ? mergeBase(picked, cwd) : picked;
 
   const violations = findViolations(collect(cwd, base));
   if (violations.length > 0) {

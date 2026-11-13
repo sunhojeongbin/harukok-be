@@ -44,6 +44,27 @@ describe('findViolations', () => {
     ).toHaveLength(1),
   );
 
+  const head = (name: string, mod?: string): string =>
+    `${name}${mod ? `.${mod}` : ''}.each`;
+
+  it.each([
+    head('it', 'skip'),
+    head('it', 'only'),
+    head('describe', 'skip'),
+    head('test', 'only'),
+    head('x' + 'it'),
+    head('x' + 'describe'),
+    head('f' + 'it'),
+  ])('.each 우회 %s', (h) => {
+    for (const open of ['([', '`'])
+      expect(
+        findViolations({
+          deleted: [],
+          added: [{ file: 'src/a.spec.ts', line: `  ${h}${open}` }],
+        }),
+      ).toHaveLength(1);
+  });
+
   it('테스트 파일이 아니면 금지 패턴을 무시한다', () => {
     expect(
       findViolations({

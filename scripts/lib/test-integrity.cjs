@@ -4,7 +4,7 @@
 
 const TEST_FILE = /\.(?:e2e-)?spec\.ts$/;
 const FORBIDDEN =
-  /\b(?:(?:it|describe|test)\.(?:skip|only)|x(?:it|describe|test)|f(?:it|describe))\s*\(/;
+  /\b(?:(?:it|describe|test)\.(?:skip|only)|x(?:it|describe|test)|f(?:it|describe))(?:\.each)?\s*[(`]/;
 
 function isTestFile(path) {
   return TEST_FILE.test(path);

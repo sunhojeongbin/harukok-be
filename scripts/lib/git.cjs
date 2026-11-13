@@ -4,7 +4,7 @@ const { spawnSync } = require('node:child_process');
 
 /** git 을 셸 없이 실행한다. */
 function run(args, cwd) {
-  return spawnSync('git', args, {
+  return spawnSync('git', ['-c', 'core.quotepath=false', ...args], {
     cwd,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
@@ -31,4 +31,11 @@ function defaultBase(cwd) {
   return null;
 }
 
-module.exports = { run, refExists, fileInRef, defaultBase };
+/** base 와 HEAD 의 공통 조상. 실패하면 base 를 그대로 돌려준다. */
+function mergeBase(base, cwd) {
+  const r = run(['merge-base', base, 'HEAD'], cwd);
+  const out = r.status === 0 ? r.stdout.trim() : '';
+  return out || base;
+}
+
+module.exports = { run, mergeBase, refExists, fileInRef, defaultBase };

@@ -9,3 +9,4 @@ export declare function fileInRef(
   cwd: string,
 ): boolean;
 export declare function defaultBase(cwd: string): string | null;
+export declare function mergeBase(base: string, cwd: string): string;
