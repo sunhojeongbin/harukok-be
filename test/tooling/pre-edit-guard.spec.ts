@@ -65,6 +65,18 @@ describe('pre-edit-guard decide', () => {
     expectBlocked({ file_path: `${dir}/src/../.claude/hooks/x.cjs` });
     expectBlocked({ file_path: '.claude/settings.json' });
   });
+  it('CI 워크플로(.github/workflows)를 차단한다', () => {
+    expectBlocked({ file_path: `${dir}/.github/workflows/ci.yml` });
+    expectAllowed({ file_path: `${dir}/.github/PULL_REQUEST_TEMPLATE.md` });
+  });
+  it('대소문자를 바꿔도 차단한다 (대소문자 무시 파일시스템)', () => {
+    expectBlocked({ file_path: `${dir}/Docs/Spec/x.md` });
+    expectBlocked({ file_path: `${dir}/.ENV` });
+    expectBlocked({ file_path: `${dir}/.claude/Hooks/a.cjs` });
+    expectBlocked({ file_path: `${dir}/.claude/SETTINGS.json` });
+    expectBlocked({ file_path: `${dir}/.GitHub/Workflows/ci.yml` });
+    expectAllowed({ file_path: `${dir}/.ENV.EXAMPLE` });
+  });
   it('병합된 마이그레이션만 차단한다', () => {
     const f = `${dir}/migrations/20261110_001__init_schema.sql`;
     expectBlocked({ file_path: f }, { base: 'origin/main', inBase: true });

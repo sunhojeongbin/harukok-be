@@ -117,6 +117,67 @@ describe('pre-bash-guard DB 가드 (플래그·stdin SQL)', () => {
   ])('허용: %s', (c) => expectAllowed(c));
 });
 
+describe('pre-bash-guard 보호 경로 쓰기', () => {
+  const runMerged = (command: string) =>
+    decide(
+      { tool_name: 'Bash', tool_input: { command } },
+      {
+        projectDir: dir,
+        home: '/home/u',
+        base: 'origin/main',
+        fileInBase: (p: string) => p.startsWith('migrations/'),
+      },
+    );
+
+  it.each([
+    'sed -i s/a/b/ .claude/hooks/stop-verify.cjs',
+    "sed -i '' 's/a/b/' scripts/lib/git.cjs",
+    'perl -pi -e s/a/b/ .claude/settings.json',
+    'rm .claude/state/stop-x.json',
+    'unlink .claude/state/stop-x.json',
+    'echo x > docs/spec/01-api.md',
+    'echo x >> docs/spec/01-api.md',
+    'echo x >docs/spec/01-api.md',
+    'echo x 2> .claude/state/a.json',
+    'echo x | tee .claude/hooks/a.cjs',
+    'echo x | tee -a .env',
+    'mv .claude/hooks/a.cjs /tmp/a',
+    'mv /tmp/a .claude/hooks/a.cjs',
+    'cp /tmp/a scripts/check-test-integrity.cjs',
+    'cp docs/spec/01-api.md /tmp/a',
+    'truncate -s 0 .claude/settings.json',
+    'git restore .claude/hooks/a.cjs',
+    'git checkout origin/main -- docs/spec/01-api.md',
+    'git checkout origin/main -- .github/workflows/ci.yml',
+    'sed -i s/a/b/ Docs/Spec/x.md',
+    'echo x > .ENV',
+    'bash -c "echo x > docs/spec/a.md"',
+  ])('차단: %s', (c) => expectBlocked(c));
+
+  it('병합된 마이그레이션 복원·덮어쓰기를 차단한다', () => {
+    const m = 'migrations/20261112_005__social_unlink.sql';
+    expect(runMerged(`git checkout origin/main -- ${m}`).allow).toBe(false);
+    expect(runMerged(`echo x > ${m}`).allow).toBe(false);
+  });
+
+  it.each([
+    'echo x > notes.txt',
+    'rm dist/a.js',
+    'rm src/a.ts',
+    'echo x > /dev/null',
+    'ls docs/spec',
+    'cat docs/spec/01-api.md',
+    'sed -n 1,5p docs/spec/01-api.md',
+    'sed -i s/a/b/ src/a.ts',
+    'cp .env.example /tmp/a',
+    'git checkout -b feat/x',
+    'git checkout main',
+    'git restore src/a.ts',
+    'echo x 2>&1',
+    'npm test > /dev/null 2>&1',
+  ])('허용: %s', (c) => expectAllowed(c));
+});
+
 describe('pre-bash-guard 실행', () => {
   const spawn = (input: string) =>
     spawnSync('node', [hook], {

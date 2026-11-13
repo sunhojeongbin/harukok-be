@@ -5,5 +5,10 @@ export declare function decide(
     tool_input?: Record<string, unknown>;
     cwd?: string;
   },
-  ctx?: { projectDir?: string; home?: string },
+  ctx?: {
+    projectDir?: string;
+    home?: string;
+    base?: string | null;
+    fileInBase?: (relPath: string) => boolean;
+  },
 ): Decision;

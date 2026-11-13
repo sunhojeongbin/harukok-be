@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { projectDir, runHook } = require('./lib/hook-io.cjs');
+const { protectedReason } = require('./lib/protected-paths.cjs');
 const libDir = path.join(__dirname, '..', '..', 'scripts', 'lib');
 const { isLocalHost, assertDbNameDestructiveAllowed, parseDbTarget } = require(
   path.join(libDir, 'db-guard.cjs'),
@@ -399,10 +400,86 @@ function checkReader(cmd, args) {
   return null;
 }
 
+/** 쓰기·삭제·이동 대상이 보호 경로면 차단한다 (편집 가드의 Bash 우회 방지). */
+function checkTarget(t, ctx) {
+  if (typeof t !== 'string' || t === '' || t.includes('$')) return null;
+  const expanded =
+    t === '~' || t.startsWith('~/') ? path.join(ctx.home, t.slice(1)) : t;
+  const reason = protectedReason(expanded, ctx);
+  return reason ? deny(`${reason} (Bash 쓰기 포함)`) : null;
+}
+
+const nonFlags = (args) => {
+  const out = [];
+  let only = false;
+  for (const a of args) {
+    if (only) out.push(a);
+    else if (a === '--') only = true;
+    else if (!a.startsWith('-') || a === '-') out.push(a);
+  }
+  return out;
+};
+
+/** 리다이렉션(>, >>, 2>, &>, >|) 대상을 검사한다. */
+function checkRedirects(tokens, ctx) {
+  for (let i = 0; i < tokens.length; i++) {
+    const m = /^(?:\d*|&)>>?\|?(.*)$/.exec(tokens[i]);
+    if (!m) continue;
+    const target = m[1] !== '' ? m[1] : tokens[i + 1];
+    if (target && !target.startsWith('&')) {
+      const d = checkTarget(target, ctx);
+      if (d) return d;
+    }
+  }
+  return null;
+}
+
+function checkWrites(cmd, args, ctx) {
+  let targets = [];
+  if (['rm', 'unlink', 'mv', 'cp', 'tee', 'truncate'].includes(cmd)) {
+    targets = nonFlags(args);
+  } else if (
+    (cmd === 'sed' &&
+      args.some(
+        (a) =>
+          a === '--in-place' ||
+          /^-[^-]*i/.test(a) ||
+          a.startsWith('--in-place='),
+      )) ||
+    (cmd === 'perl' && args.some((a) => /^-[^-]*i/.test(a)))
+  ) {
+    targets = nonFlags(args);
+  } else if (cmd === 'git') {
+    let i = 0;
+    while (i < args.length) {
+      if (
+        ['-C', '-c', '--git-dir', '--work-tree', '--namespace'].includes(
+          args[i],
+        )
+      )
+        i += 2;
+      else if (args[i].startsWith('-')) i++;
+      else break;
+    }
+    if (['checkout', 'restore', 'rm', 'mv'].includes(args[i])) {
+      targets = nonFlags(args.slice(i + 1));
+    }
+  }
+  for (const t of targets) {
+    const d = checkTarget(t, ctx);
+    if (d) return d;
+  }
+  return null;
+}
+
 function checkTokens(tokens, ctx, depth) {
+  const redirect = checkRedirects(tokens, ctx);
+  if (redirect) return redirect;
   const parts = splitCommand(tokens);
   if (!parts) return null;
   const { env, cmd, args } = parts;
+  const write = checkWrites(cmd, args, ctx);
+  if (write) return write;
   if (cmd === 'git') return checkGit(args);
   if (cmd === 'rm') return checkRm(args, ctx);
   if (PG_TOOLS.includes(cmd)) return checkPg(cmd, args, env, ctx);
@@ -431,7 +508,7 @@ function checkCommand(command, ctx, depth) {
   return null;
 }
 
-/** ctx = { projectDir?, home? } */
+/** ctx = { projectDir?, home?, base?, fileInBase? } */
 function decide(input, ctx = {}) {
   if (input.tool_name && input.tool_name !== 'Bash') return ALLOW;
   const command = input.tool_input?.command;
@@ -442,6 +519,8 @@ function decide(input, ctx = {}) {
       {
         projectDir: ctx.projectDir ?? projectDir(input),
         home: ctx.home ?? os.homedir(),
+        base: ctx.base,
+        fileInBase: ctx.fileInBase,
       },
       0,
     ) ?? ALLOW
