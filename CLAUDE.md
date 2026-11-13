@@ -28,6 +28,7 @@
 - `src/modules/<도메인>/{controller,usecases,dto,entities,errors}`, 공통 코드는 `src/common/`
 - UseCase 는 1파일 1유스케이스. 컨트롤러는 UseCase 만 호출한다
 - 업무 오류는 도메인별 `errors/` 에 정의하고 `BusinessException` 으로 던진다
+- 컨트롤러·DTO 에 Swagger 데코레이터(`@ApiTags`, 응답·오류 스키마)를 직접 붙인다 (CLI 플러그인 미사용). 문서는 `/docs`, 운영에서는 끈다
 - 마이그레이션은 `migrations/*.sql`. `synchronize` 는 끈다
 
 ## 4. 명세 코드 규칙 (놓치기 쉬운 것)

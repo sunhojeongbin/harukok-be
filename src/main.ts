@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { configureApp } from './app.setup';
 import type { EnvironmentVariables } from './common/config/env.validation';
+import { isSwaggerEnabled, setupSwagger } from './common/swagger/setup-swagger';
 
 async function bootstrap() {
   // 로컬 개발용. 이미 설정된 환경변수(운영·CI)는 덮어쓰지 않는다.
@@ -13,6 +14,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   configureApp(app);
   const config = app.get(ConfigService<EnvironmentVariables, true>);
+  if (isSwaggerEnabled(config.get('NODE_ENV', { infer: true }))) {
+    setupSwagger(app);
+  }
   await app.listen(config.get('PORT', { infer: true }));
 }
 void bootstrap();
