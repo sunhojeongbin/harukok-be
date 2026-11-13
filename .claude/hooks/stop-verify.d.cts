@@ -13,3 +13,17 @@ export declare function runStop(opts: {
   stopHookActive?: boolean;
   verify?: (projectDir: string) => { passed: boolean; output: string };
 }): { exitCode: number; stderr: string };
+export declare function defaultVerify(
+  projectDir: string,
+  spawn?: (
+    cmd: string,
+    args: string[],
+    opts: Record<string, unknown>,
+  ) => {
+    status: number | null;
+    signal?: string | null;
+    stdout?: string;
+    stderr?: string;
+    error?: Error;
+  },
+): { passed: boolean; output: string };

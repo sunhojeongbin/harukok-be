@@ -46,6 +46,14 @@ describe('pre-edit-guard decide', () => {
     expectAllowed({ file_path: `${dir}/scripts/db-migrate.cjs` });
     expectAllowed({ file_path: `${dir}/scripts/db-setup.cjs` });
   });
+  it('루프 상태 파일(.claude/state)을 차단한다', () => {
+    const r = run({ file_path: `${dir}/.claude/state/stop-abc.json` });
+    expect(r.allow).toBe(false);
+    expect('reason' in r && r.reason).toContain('재시도');
+    expectBlocked({ file_path: `${dir}/.claude/state/STUCK-abc.md` });
+    expectBlocked({ file_path: `${dir}/src/../.claude/state/x.json` });
+    expectAllowed({ file_path: `${dir}/.claude/statement.md` });
+  });
   it('.env 계열은 차단, .env.example 은 허용', () => {
     expectBlocked({ file_path: `${dir}/.env` });
     expectBlocked({ file_path: `${dir}/.env.local` });

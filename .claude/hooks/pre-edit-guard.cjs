@@ -37,6 +37,11 @@ function decide(input, ctx = {}) {
       `차단: ${posix} — .env 파일은 편집할 수 없습니다 (.env.example 만 허용).`,
     );
   }
+  if (parts[0] === '.claude' && parts[1] === 'state') {
+    return deny(
+      `차단: ${posix} — 루프가 재시도 횟수·STUCK 기록을 조작하지 못하게 막습니다.`,
+    );
+  }
   if (
     posix === '.claude/settings.json' ||
     posix === '.claude/settings.local.json' ||

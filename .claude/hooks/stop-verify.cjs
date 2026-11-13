@@ -35,15 +35,27 @@ function readFailures(file) {
 
 const tail = (text, n) => text.trimEnd().split('\n').slice(-n).join('\n');
 
-function defaultVerify(root) {
-  const r = spawnSync('npm', ['run', 'verify:fast'], {
+const VERIFY_TIMEOUT_MS = 570_000; // Stop 훅 제한(600초)보다 먼저 끊는다.
+
+/** spawn 은 테스트용 주입 지점. 시간 초과는 status null → 실패로 취급한다. */
+function defaultVerify(root, spawn = spawnSync) {
+  const r = spawn('npm', ['run', 'verify:fast'], {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
+    timeout: VERIFY_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
   });
+  const timedOut = r.error?.code === 'ETIMEDOUT';
   return {
     passed: r.status === 0,
-    output: `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? r.error.message : ''}`,
+    output: `${r.stdout ?? ''}${r.stderr ?? ''}${
+      timedOut
+        ? `\n검증 시간 초과(${VERIFY_TIMEOUT_MS / 1000}초)`
+        : r.error
+          ? r.error.message
+          : ''
+    }`,
   };
 }
 
@@ -79,7 +91,7 @@ function runStop({ projectDir: root, sessionId, verify }) {
   };
 }
 
-module.exports = { MAX_RETRIES, statePath, nextAction, runStop };
+module.exports = { MAX_RETRIES, defaultVerify, statePath, nextAction, runStop };
 
 if (require.main === module) {
   void (async () => {

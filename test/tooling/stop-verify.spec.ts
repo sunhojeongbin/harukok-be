@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   MAX_RETRIES,
+  defaultVerify,
   nextAction,
   runStop,
   statePath,
@@ -102,5 +103,36 @@ describe('stop-verify runStop', () => {
     expect(statePath('/p', '../../x')).toBe(
       '/p/.claude/state/stop-______x.json',
     );
+  });
+});
+
+describe('stop-verify defaultVerify 시간 제한', () => {
+  it('타임아웃·SIGKILL 옵션을 넘기고, 시간 초과는 실패와 안내 메시지가 된다', () => {
+    let opts: Record<string, unknown> = {};
+    const r = defaultVerify('/p', (_cmd, _args, o) => {
+      opts = o;
+      return {
+        status: null,
+        signal: 'SIGKILL',
+        stdout: 'partial',
+        stderr: '',
+        error: Object.assign(new Error('spawnSync npm ETIMEDOUT'), {
+          code: 'ETIMEDOUT',
+        }),
+      };
+    });
+    expect(opts.timeout).toBe(570_000);
+    expect(opts.killSignal).toBe('SIGKILL');
+    expect(r.passed).toBe(false);
+    expect(r.output).toContain('검증 시간 초과(570초)');
+    expect(r.output).toContain('partial');
+  });
+  it('정상 종료(status 0)는 통과', () => {
+    const r = defaultVerify('/p', () => ({
+      status: 0,
+      stdout: 'ok',
+      stderr: '',
+    }));
+    expect(r.passed).toBe(true);
   });
 });
