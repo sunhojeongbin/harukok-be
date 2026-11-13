@@ -28,7 +28,7 @@ function fail(msg) {
 }
 
 function run(cmd, args) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8' });
+  const r = spawnSync(cmd, args, { encoding: 'utf8' }); // shell 미사용
   if (r.error) fail(`${cmd} 실행 실패: ${r.error.message}`);
   return r;
 }
@@ -56,7 +56,9 @@ function main() {
     try {
       return { url: u, ...parseDbTarget(u) };
     } catch {
-      return fail(`DB URL 을 해석할 수 없습니다: ${u}`);
+      return fail(
+        'DB URL 을 해석할 수 없거나 허용되지 않는 쿼리 파라미터가 있습니다 (host, dbname 등은 URL 쿼리로 지정할 수 없음). .env 를 확인하세요.',
+      );
     }
   });
 
@@ -78,13 +80,15 @@ function main() {
 
   for (const t of targets) {
     const adm = adminUrl(t.url);
+    if (!/^[a-z_][a-z0-9_]*$/.test(t.database)) {
+      fail('DB 이름은 소문자·숫자·밑줄만 허용됩니다.');
+    }
+    // psql -c 는 :변수 치환이 안 되므로 검증된 이름을 리터럴로 넣는다.
     const exists = run('psql', [
       adm,
       '-tA',
-      '-v',
-      `name=${t.database}`,
       '-c',
-      "SELECT 1 FROM pg_database WHERE datname = :'name'",
+      `SELECT 1 FROM pg_database WHERE datname = '${t.database}'`,
     ]);
     if (exists.status !== 0) fail(`DB 조회 실패: ${exists.stderr}`);
     if (exists.stdout.trim() === '1') {

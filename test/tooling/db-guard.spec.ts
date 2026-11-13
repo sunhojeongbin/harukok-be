@@ -11,6 +11,7 @@ describe('assertDestructiveAllowed', () => {
     'postgresql://me@localhost:5432/harukok_test',
     'postgresql://me@127.0.0.1/harukok_check?sslmode=disable',
     'postgresql://me@[::1]:5432/harukok_test',
+    'postgresql://me@localhost/harukok_test?sslmode=disable&connect_timeout=5&application_name=x',
   ])('허용: %s', (u) =>
     expect(() => assertDestructiveAllowed(u)).not.toThrow(),
   );
@@ -21,6 +22,13 @@ describe('assertDestructiveAllowed', () => {
     'postgresql://me@db.example.com:5432/harukok_test',
     'postgresql://me@localhost:5432',
     'not-a-url',
+    'postgresql://me@localhost/harukok_test?host=db.example.com',
+    'postgresql://me@localhost/harukok_test?hostaddr=10.0.0.1',
+    'postgresql://me@localhost/harukok_test?dbname=harukok_dev',
+    'postgresql://me@localhost/harukok_test?service=prod',
+    'postgresql://me@localhost/harukok_test?port=6543',
+    'postgresql://me@localhost/harukok_test?options=-c%20x%3Dy',
+    'postgresql://me@localhost/harukok_test?sslmode=disable&HOST=db.example.com',
   ])('거부: %s', (u) =>
     expect(() => assertDestructiveAllowed(u)).toThrow(/DB 안전 가드/),
   );
