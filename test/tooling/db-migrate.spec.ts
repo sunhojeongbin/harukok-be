@@ -68,10 +68,10 @@ describe('listMigrations', () => {
     expect(() => listMigrations(dir)).toThrow(/20261110_001/);
   });
 
-  it('저장소의 migrations/ 는 001, 005 순서다', () => {
+  it('저장소의 migrations/ 는 001, 005, 006 순서다', () => {
     expect(
       listMigrations(path.join(ROOT, 'migrations')).map((m) => m.version),
-    ).toEqual(['20261110_001', '20261112_005']);
+    ).toEqual(['20261110_001', '20261112_005', '20261113_006']);
   });
 });
 

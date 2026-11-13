@@ -236,8 +236,8 @@ describe('스키마 001·005 (e2e)', () => {
     it('users 1행 삭제로 자식 테이블이 전부 0건이 된다', async () => {
       const userId = await newUser('fake@example.com', '하루콕');
       const term = await db.query<{ id: string }>(
-        `INSERT INTO terms (type, version, title, content_url, effective_from)
-         VALUES ('SERVICE', 'fake-1', '가짜 약관', 'https://example.com/terms', now())
+        `INSERT INTO terms (version, title, content_url, effective_from)
+         VALUES ('fake-1', '가짜 약관', 'https://example.com/terms', now())
          RETURNING id`,
       );
       await db.query(insertSocial, [userId, 'KAKAO', 'fake-kakao', null]);
@@ -262,6 +262,32 @@ describe('스키마 001·005 (e2e)', () => {
         );
         expect({ table, n: r.rows[0].n }).toEqual({ table, n: '0' });
       }
+    });
+  });
+
+  describe('terms 이용약관 단일화 (006)', () => {
+    const insertTerm = `INSERT INTO terms (version, title, content_url, effective_from)
+      VALUES ($1, '가짜 이용약관', 'https://example.com/terms', now())`;
+
+    it('컬럼은 id·version·title·content_url·effective_from·created_at 뿐이다 (type·is_required 없음)', async () => {
+      const r = await db.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'terms' ORDER BY column_name`,
+      );
+
+      expect(r.rows.map((row) => row.column_name)).toEqual([
+        'content_url',
+        'created_at',
+        'effective_from',
+        'id',
+        'title',
+        'version',
+      ]);
+    });
+
+    it('같은 version 은 두 번 넣을 수 없다 (uq_terms_version)', async () => {
+      await expectOk(insertTerm, ['fake-1.0']);
+      await expectViolation('uq_terms_version', insertTerm, ['fake-1.0']);
     });
   });
 
