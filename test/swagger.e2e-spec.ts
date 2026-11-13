@@ -62,6 +62,13 @@ describe('Swagger /docs (e2e)', () => {
       ]);
     });
 
+    it('GET /terms 를 terms 태그와 200 응답으로 담는다', () => {
+      const terms = doc.paths['/terms']?.get;
+
+      expect(terms?.tags).toEqual(['terms']);
+      expect(Object.keys(terms?.responses ?? {})).toEqual(['200']);
+    });
+
     it('Bearer 인증 스키마를 등록한다', () => {
       expect(doc.components.securitySchemes?.bearer?.scheme).toBe('bearer');
     });
