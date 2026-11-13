@@ -45,7 +45,7 @@
 | 신규 환경 적용 | 001(통합판) + 005만 실행. 005는 **미검증** | DB 설계서 머리말 |
 | 원본 우선순위 | `DDL(.sql) → DB 표준 → DB 설계서 → ERD`. 노션 DDL과 실제 `.sql`이 다르면 **파일이 기준** | DB 표준, DDL 경고 |
 | 기존 자산 | 예전 `.sql` 파일·`CLAUDE.md`·`common/` 모듈은 **가져오지 않는다**. 전부 새로 작성 | 선호님 결정 (2026-11-13) |
-| 적용된 DB | **없음**. 로컬 Docker에 새로 만든다 | 선호님 결정 (2026-11-13) |
+| 적용된 DB | **없음**. 선호님 Mac에 설치한 PostgreSQL 18에 새로 만든다 (Docker 미사용) | 선호님 결정 (2026-11-13) |
 | `updated_at` | DB 트리거로 갱신 (TypeORM `@UpdateDateColumn`에 의존하지 않음) | DB 설계서 5-4 |
 | 명세 동결 | "개발 시작 후 기능 명세서를 수정하지 않는다" | 기능 명세서 7장 |
 | 출시일 | 2026-11-30 | 기능 명세서 2장 |
@@ -54,7 +54,7 @@
 
 | 안 | 내용 | 장점 | 단점 | 판단 |
 | --- | --- | --- | --- | --- |
-| **A** | 로컬 PC에서 Claude 루프 + GitHub Actions는 자동 검사만 | 로컬 Docker로 실제 PostgreSQL 18 테스트 가능, 진행 상황을 바로 보고 끊을 수 있음, 추가 비용 없음 | PC가 켜져 있어야 루프가 돈다 | ✅ **선택** |
+| **A** | 로컬 PC에서 Claude 루프 + GitHub Actions는 자동 검사만 | Mac에 설치한 PostgreSQL 18로 실제 DB 테스트 가능, 진행 상황을 바로 보고 끊을 수 있음, 추가 비용 없음 | PC가 켜져 있어야 루프가 돈다 | ✅ **선택** |
 | B | A + PR마다 `claude-code-action` 자동 리뷰 | 검수자 1명 추가 효과 | API 키·비용·워크플로 권한 관리 추가 | 루프 안정화 후 추가 검토 |
 | C | 이슈에 `@claude` → CI 안에서 구현·PR 생성 | 사람 손이 가장 적음 | 막혔을 때 원인 파악 어려움, CI 안 DB 설정 부담, 비용 최대 | 제외 |
 
@@ -97,7 +97,6 @@ harukok-be/
 │       └── health/                # GET /health
 │           └── (모듈 내부) controller / usecases / dto / entities / errors
 ├── test/                          # DB 통합(e2e) 테스트
-├── docker-compose.yml             # postgres:18 (개발용 + 테스트용 DB)
 ├── .env.example
 └── .github/workflows/ci.yml       # P7
 ```
@@ -110,13 +109,28 @@ harukok-be/
 | `typecheck` | `tsc --noEmit` |
 | `test` | 단위 테스트 (DB 없음, 빠름) |
 | `test:e2e` | 실제 PostgreSQL 18 대상 통합 테스트 |
-| `db:up` / `db:down` | 테스트 DB 컨테이너 기동/정지 |
+| `db:setup` | 로컬 서버 버전이 18인지 확인 → `harukok_dev`·`harukok_test` DB 생성 (이미 있으면 건너뜀) |
 | `db:migrate` / `db:rollback` | 마이그레이션 적용/롤백 |
-| `db:check` | 빈 DB에 전체 up → 전체 down → 다시 up, 잔여 객체 0 확인 |
+| `db:check` | 임시 DB `harukok_check` 생성 → 전체 up → 전체 down → 다시 up, 잔여 객체 0 확인 → 임시 DB 삭제 |
 | `verify:fast` | `lint` + `typecheck` + `test` |
 | `verify` | `verify:fast` + `db:check` + `test:e2e` (PR 전 필수) |
 
 - TypeORM은 **엔티티 매핑과 쿼리만** 담당한다. `synchronize: false` 고정, TypeORM 마이그레이션 기능은 쓰지 않는다 (스키마 원본은 `migrations/*.sql`).
+
+**로컬 DB (Mac 직접 설치)**
+- 설치: Homebrew `postgresql@18` → `brew services start postgresql@18`. 버전 고정 공식이라 실수로 19로 올라가지 않는다. 다른 버전이 이미 깔려 있으면 PATH에서 18의 `psql`이 먼저 잡히는지 `db:setup`이 확인한다
+- DB 3개를 역할별로 분리한다
+
+| DB | 용도 | 지워도 되나 |
+| --- | --- | --- |
+| `harukok_dev` | 개발 중 직접 실행 | 사람만 |
+| `harukok_test` | `test:e2e` — 테스트마다 테이블 비움 | 스크립트 |
+| `harukok_check` | `db:check` 전용 — 매번 생성·삭제 | 스크립트 |
+
+- **안전장치**: Mac에 다른 프로젝트 DB가 함께 있을 수 있으므로, DB를 만들거나 지우는 스크립트는 **호스트가 `localhost`이고 DB 이름이 `harukok_test`·`harukok_check`일 때만** 동작한다. 그 외에는 즉시 실패한다. 같은 규칙을 PreToolUse 훅에도 건다 (`dropdb`·`DROP DATABASE` 대상 검사)
+- 접속 정보는 `.env`의 `DATABASE_URL`·`TEST_DATABASE_URL`로 받는다. Homebrew 기본 설치는 Mac 사용자 이름으로 비밀번호 없이 접속되므로 `.env.example`에는 그 형태를 예시로 둔다
+- CI는 Mac이 없으므로 GitHub Actions의 PostgreSQL 18 서비스 컨테이너를 쓴다. 로컬과 CI 모두 같은 `db:setup`·`db:check` 스크립트를 쓰고, 접속 문자열만 다르다
+- 참고: [Homebrew postgresql@18](https://formulae.brew.sh/formula/postgresql@18)
 
 ### P2. 명세를 저장소로 옮기기
 
@@ -178,13 +192,13 @@ harukok-be/
 
 - **무한 반복 방지**: Stop 훅은 `stop_hook_active`만 보지 않고 **세션별 재시도 횟수(최대 3회)** 를 파일에 기록한다. 3회 연속 같은 게이트에서 실패하면 차단을 풀고 "막힘 보고"를 남기도록 한다. 이유: `stop_hook_active`만 쓰면 1회 재시도 후 그냥 끝나 버려 검증이 약해지고, 아무 제한이 없으면 같은 실패를 계속 고친다.
 - **"적용된 마이그레이션" 판정 기준**: 운영 DB가 아직 없으므로 "`main`에 병합된 파일"을 적용된 것으로 본다. 즉 마이그레이션은 그 파일을 처음 추가하는 PR 안에서는 자유롭게 고칠 수 있고(0단위에서 005 수정 포함), 병합 뒤에는 새 번호로만 바꾼다.
-- **권한**: `npm run *`, `docker compose *`, `git` 일반 명령은 허용 목록에 넣어 루프가 승인 대기로 멈추지 않게 한다. `.env` 읽기는 거부 목록.
+- **권한**: `npm run *`, `psql`(localhost 한정), `git` 일반 명령은 허용 목록에 넣어 루프가 승인 대기로 멈추지 않게 한다. `.env` 읽기는 거부 목록.
 - 참고: [Hooks reference](https://code.claude.com/docs/en/hooks)
 
 ### P6. 작업 단위와 루프 절차
 
 **준비 작업과 0단위의 경계** — 훅이 돌려면 골격이 먼저 있어야 하므로 둘로 나눈다.
-- **준비 작업(이 설계의 구현 범위, 사람과 함께)**: NestJS 최소 골격, `package.json` 스크립트(P1 표), ESLint·Prettier·Jest, `docker-compose.yml`, `.claude/` 훅·권한, `CLAUDE.md`, `docs/spec/`, `migrations/` 원본 파일 배치, CI 워크플로, `.env.example`. 각 게이트가 "일부러 실패시키면 실제로 막는지" 확인까지 포함
+- **준비 작업(이 설계의 구현 범위, 사람과 함께)**: NestJS 최소 골격, `package.json` 스크립트(P1 표), ESLint·Prettier·Jest, `scripts/db-setup`, `.claude/` 훅·권한, `CLAUDE.md`, `docs/spec/`, `migrations/` 원본 파일 배치, CI 워크플로, `.env.example`. 각 게이트가 "일부러 실패시키면 실제로 막는지" 확인까지 포함
 - **0단위(루프의 첫 시험)**: config 검증, DB 연결, `GET /health`, 마이그레이션 실행 스크립트 + `db:check` 통과(005 검증 포함). 위험이 낮은 작업으로 루프가 실제로 도는지 먼저 확인한다
 
 **작업 순서** (의존성 순, 각 줄이 PR 1개):
@@ -229,13 +243,13 @@ harukok-be/
 ### 선호님이 결정한 것
 - A안 (로컬 루프 + CI 자동 검사)
 - `CLAUDE.md`·`common/` 모듈·마이그레이션 파일 모두 새로 작성 (예전 저장소 자산 미사용)
-- 적용된 DB 없음 → 로컬 Docker PostgreSQL 18에 새로 생성
+- 적용된 DB 없음 → Mac에 직접 설치한 PostgreSQL 18에 새로 생성 (Docker 미사용)
+- 명세 저장소 사본(`docs/spec/`)을 루프 기준으로, 노션 → 저장소 한 방향 동기화
 - 개입 지점 2곳 (계획 승인, PR 병합) — 제안에 동의
 - 명세 6개 문서 내용 전부 (스택, DB 18, SQL 마이그레이션, API 12개, 규칙)
 - 문서는 한국어로 작성
 
 ### Claude가 정한 것 (검토 필요)
-- 저장소 사본(`docs/spec/`)을 루프 기준으로, 노션 → 저장소 한 방향 동기화
 - Stop 훅 재시도 상한 3회
 - 작업 단위 7개와 순서
 - 외부 API는 가짜 구현으로 테스트, 실제 호출은 사람 확인
