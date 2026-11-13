@@ -3,6 +3,7 @@
 // 명령을 따옴표를 존중해 조각(&&, ||, ;, |, 줄바꿈 등)으로 나누고 각 조각의 토큰을 검사한다.
 // 따옴표 안 문자열은 명령으로 보지 않는다 (단 psql -c 의 SQL, sh -c 의 스크립트는 검사한다).
 
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { projectDir, runHook } = require('./lib/hook-io.cjs');
@@ -92,33 +93,50 @@ const READERS = [
   'source',
   '.',
 ];
-const PG_VALUE_FLAGS = [
-  '-h',
-  '-p',
-  '-U',
-  '-d',
-  '-f',
-  '-c',
-  '-o',
-  '-l',
-  '-T',
-  '-O',
-  '-D',
-  '-E',
-  '-S',
-  '-e',
-];
-const PG_LONG_VALUE = [
-  '--host',
-  '--port',
-  '--username',
-  '--dbname',
-  '--file',
-  '--command',
-  '--owner',
-  '--template',
-  '--encoding',
-];
+// 도구별 값을 받는 옵션. 여기에 없는 옵션(-e, -l, -S 등)은 값이 없는 플래그로 본다.
+const PG_SHORT_VALUE = {
+  psql: 'hpUdfcoTvPLFR',
+  dropdb: 'hpUOD',
+  createdb: 'hpUODETl',
+  other: 'hpUdfFjnNtTZES',
+};
+const PG_LONG_VALUE = {
+  psql: [
+    '--host',
+    '--port',
+    '--username',
+    '--dbname',
+    '--file',
+    '--command',
+    '--output',
+    '--variable',
+    '--set',
+  ],
+  dropdb: ['--maintenance-db', '--host', '--port', '--username'],
+  createdb: [
+    '--maintenance-db',
+    '--host',
+    '--port',
+    '--username',
+    '--owner',
+    '--tablespace',
+    '--encoding',
+    '--template',
+    '--locale',
+  ],
+  other: [
+    '--host',
+    '--port',
+    '--username',
+    '--dbname',
+    '--file',
+    '--format',
+    '--jobs',
+    '--schema',
+    '--table',
+  ],
+};
+const MAX_SQL_FILE = 1024 * 1024;
 
 /** 앞쪽의 VAR=값, sudo/env 등을 걷어내고 { env, cmd, args } 로 나눈다. */
 function splitCommand(tokens) {
@@ -249,7 +267,35 @@ function checkHost(host, what) {
   return deny(`차단: ${what} 의 호스트 '${host}' 는 로컬이 아닙니다.`);
 }
 
-function checkPg(cmd, args, env) {
+const DB_STMT =
+  /\b(drop|create)\s+database\s+(?:if\s+(?:not\s+)?exists\s+)?"?([\w-]+)"?/gi;
+
+/** SQL 텍스트의 DROP/CREATE DATABASE 대상 이름을 검사한다. */
+function checkSqlText(text) {
+  DB_STMT.lastIndex = 0;
+  let m;
+  while ((m = DB_STMT.exec(text))) {
+    const d = checkDbName(m[2], `${m[1].toUpperCase()} DATABASE ${m[2]}`);
+    if (d) return d;
+  }
+  return null;
+}
+
+/** SQL 파일이 있으면 읽어서 검사한다. 없거나 읽을 수 없으면 통과. */
+function checkSqlFile(file, ctx) {
+  if (file === '' || file === '-') return null;
+  const abs = path.resolve(ctx.projectDir, file);
+  let text;
+  try {
+    if (fs.statSync(abs).size > MAX_SQL_FILE) return null;
+    text = fs.readFileSync(abs, 'utf8');
+  } catch {
+    return null;
+  }
+  return checkSqlText(text);
+}
+
+function checkPg(cmd, args, env, ctx) {
   for (const e of env) {
     const m = /^PGHOST(?:ADDR)?=(.*)$/.exec(e);
     if (m) {
@@ -257,46 +303,63 @@ function checkPg(cmd, args, env) {
       if (d) return d;
     }
   }
+  const kind = cmd in PG_SHORT_VALUE ? cmd : 'other';
+  const shortValue = PG_SHORT_VALUE[kind];
+  const longValue = PG_LONG_VALUE[kind];
   const positional = [];
   const sql = [];
+  const files = [];
+  const apply = (flag, val) => {
+    if (flag === 'h' || flag === 'host') {
+      return checkHost(val, `${cmd} -h`);
+    }
+    if (kind === 'psql' && (flag === 'c' || flag === 'command')) {
+      sql.push(val);
+      return null;
+    }
+    if (kind === 'psql' && (flag === 'f' || flag === 'file')) {
+      files.push(val);
+      return null;
+    }
+    return connInfoHost(val);
+  };
+  let onlyPositional = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    let host = null;
-    let sqlVal = null;
-    if (a === '-h' || a === '--host') host = args[++i] ?? '';
-    else if (a.startsWith('--host=')) host = a.slice(7);
-    else if (a.startsWith('-h') && !a.startsWith('--') && a.length > 2)
-      host = a.slice(2);
-    else if (a === '-c' || a === '--command') sqlVal = args[++i] ?? '';
-    else if (a.startsWith('--command=')) sqlVal = a.slice(10);
-    else if (a.startsWith('-c') && !a.startsWith('--') && a.length > 2)
-      sqlVal = a.slice(2);
-    else if (PG_VALUE_FLAGS.includes(a) || PG_LONG_VALUE.includes(a)) {
-      const v = args[++i] ?? '';
-      const c = connInfoHost(v);
-      if (c) return c;
-      continue;
-    } else if (a.startsWith('-')) continue;
-    else positional.push(a);
-
-    if (host !== null) {
-      const d = checkHost(host, `${cmd} -h`);
-      if (d) return d;
+    let d = null;
+    if (onlyPositional || !a.startsWith('-') || a === '-') {
+      if (a.startsWith('<') && !a.startsWith('<<')) {
+        files.push(a.slice(1) || (args[++i] ?? ''));
+      } else positional.push(a);
+    } else if (a === '--') onlyPositional = true;
+    else if (a.startsWith('--')) {
+      const eq = a.indexOf('=');
+      const name = eq >= 0 ? a.slice(0, eq) : a;
+      if (longValue.includes(name)) {
+        d = apply(name.slice(2), eq >= 0 ? a.slice(eq + 1) : (args[++i] ?? ''));
+      }
+    } else {
+      for (let j = 1; j < a.length; j++) {
+        if (shortValue.includes(a[j])) {
+          const rest = a.slice(j + 1);
+          d = apply(a[j], rest !== '' ? rest : (args[++i] ?? ''));
+          break;
+        }
+      }
     }
-    if (sqlVal !== null) sql.push(sqlVal);
+    if (d) return d;
   }
   for (const a of [...positional, ...args]) {
     const c = connInfoHost(a);
     if (c) return c;
   }
   for (const s of sql) {
-    const re =
-      /\b(drop|create)\s+database\s+(?:if\s+(?:not\s+)?exists\s+)?"?([\w-]+)"?/gi;
-    let m;
-    while ((m = re.exec(s))) {
-      const d = checkDbName(m[2], `${m[1].toUpperCase()} DATABASE ${m[2]}`);
-      if (d) return d;
-    }
+    const d = checkSqlText(s);
+    if (d) return d;
+  }
+  for (const f of files) {
+    const d = checkSqlFile(f, ctx);
+    if (d) return d;
   }
   if (cmd === 'dropdb' || cmd === 'createdb') {
     const name = positional[0];
@@ -342,7 +405,7 @@ function checkTokens(tokens, ctx, depth) {
   const { env, cmd, args } = parts;
   if (cmd === 'git') return checkGit(args);
   if (cmd === 'rm') return checkRm(args, ctx);
-  if (PG_TOOLS.includes(cmd)) return checkPg(cmd, args, env);
+  if (PG_TOOLS.includes(cmd)) return checkPg(cmd, args, env, ctx);
   if (READERS.includes(cmd)) return checkReader(cmd, args);
   if (depth < MAX_DEPTH) {
     let script = null;
@@ -356,6 +419,11 @@ function checkTokens(tokens, ctx, depth) {
 }
 
 function checkCommand(command, ctx, depth) {
+  // stdin(파이프·here-string·heredoc)으로 넘기는 SQL 은 조각 단위로 볼 수 없어 명령 전체에서 찾는다.
+  if (/\bpsql\b/.test(command)) {
+    const d = checkSqlText(command);
+    if (d) return d;
+  }
   for (const tokens of tokenize(command)) {
     const d = checkTokens(tokens, ctx, depth);
     if (d) return d;

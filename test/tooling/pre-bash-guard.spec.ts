@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { decide } from '../../.claude/hooks/pre-bash-guard.cjs';
 
@@ -77,6 +79,42 @@ describe('pre-bash-guard decide', () => {
       decide({ tool_name: 'Bash', tool_input: {} }, { projectDir: dir }).allow,
     ).toBe(true);
   });
+});
+
+describe('pre-bash-guard DB 가드 (플래그·stdin SQL)', () => {
+  it.each([
+    'dropdb -e harukok_dev',
+    'createdb -e myother',
+    'psql -e -c "DROP DATABASE harukok_dev"',
+    'psql -l -c "DROP DATABASE harukok_dev"',
+    'echo "DROP DATABASE harukok_dev" | psql',
+    'psql <<< "DROP DATABASE harukok_dev"',
+    'psql <<EOF\nDROP DATABASE harukok_dev;\nEOF',
+    'psql -f x.sql',
+  ])('차단: %s', (c) => {
+    const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-'));
+    try {
+      fs.writeFileSync(
+        path.join(proj, 'x.sql'),
+        'DROP DATABASE harukok_dev;\n',
+      );
+      const r = decide(
+        { tool_name: 'Bash', tool_input: { command: c } },
+        { projectDir: proj, home: '/home/u' },
+      );
+      expect(r.allow).toBe(false);
+    } finally {
+      fs.rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    'echo "DROP DATABASE harukok_check" | psql',
+    'dropdb -e harukok_check',
+    'psql -e -c "select 1"',
+    'psql -l',
+    'psql -f missing.sql',
+  ])('허용: %s', (c) => expectAllowed(c));
 });
 
 describe('pre-bash-guard 실행', () => {
