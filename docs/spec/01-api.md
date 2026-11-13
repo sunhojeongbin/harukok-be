@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b30299801ab97fe1ec4570db74
-> 원본 최종 수정: 2026-11-13T02:30:43.060Z
+> 원본 최종 수정: 2026-11-13 (이용약관 단일화·006 반영)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🔌 API 설계서 (MVP v1)
@@ -37,7 +37,7 @@
 | 화면 | 기능명 | API |
 | --- | --- | --- |
 | 로그인 | 카카오 / 애플 / 구글 로그인 | `POST /auth/social/login` |
-| 로그인 | 약관 동의 | `GET /terms`  • 위 요청의 `agreements` |
+| 로그인 | 약관 동의 | `GET /terms`  • 위 요청의 `agreement` |
 | 로그인 | 토큰 재발급 | `POST /auth/token/refresh` |
 | 로그인 | 다중 로그인 (최대 3대) | 전용 API 없음 — 로그인 트랜잭션 |
 | 스플래시 | 자동 로그인 판정 | `POST /auth/token/refresh` |
@@ -76,7 +76,7 @@
 | 3 | POST | `/auth/logout` | Bearer | 현재 기기 refresh 토큰 폐기 |
 | 4 | GET | `/users/me` | Bearer | 사용자명 · 로그인 제공자 조회 |
 | 5 | DELETE | `/users/me` | Bearer | 회원 탈퇴 (CASCADE 전체 파기) |
-| 6 | GET | `/terms` | 없음 | 현행 약관 목록 (id · version · contentUrl) |
+| 6 | GET | `/terms` | 없음 | 현행 이용약관 (id · version · contentUrl) |
 
 ### 3-2. 할 일 (6개)
 
@@ -89,7 +89,7 @@
 | 11 | DELETE | `/todos/{todoId}` | Bearer | 소프트 삭제 |
 | 12 | POST | `/todos/{todoId}/restore` | Bearer | 삭제 되돌리기 |
 
-`/terms`를 둔 이유: 약관 **본문**은 WebView(서버 개발 없음)지만, 동의 이력에 저장할 `terms.id`와 `version`은 서버가 알려줘야 한다. 앱에 하드코딩하면 약관 개정 시 앱 업데이트 없이는 반영되지 않는다. DB 설계서가 `(type, version)` UNIQUE로 개정 이력을 누적하도록 잡아둔 것과 짝이 맞는다.
+`/terms`를 둔 이유: 약관 **본문**은 WebView(서버 개발 없음)지만, 동의 이력에 저장할 `terms.id`와 `version`은 서버가 알려줘야 한다. 앱에 하드코딩하면 약관 개정 시 앱 업데이트 없이는 반영되지 않는다. DB 설계서가 `version` UNIQUE로 개정 이력을 누적하도록 잡아둔 것과 짝이 맞는다. 약관은 **이용약관 1종**이다. 개인정보 처리방침은 동의 이력을 두지 않고 앱이 노션 링크로 보여준다.
 
 ---
 
@@ -99,7 +99,8 @@
 
 ### 1. POST `/auth/social/login`
 
-- 요청: `{ provider: 'KAKAO'|'APPLE'|'GOOGLE', idToken, authorizationCode?, deviceId, agreements?: [{ termId, version }] }`
+- 요청: `{ provider: 'KAKAO'|'APPLE'|'GOOGLE', idToken, authorizationCode?, deviceId, agreement?: { termId, version } }`
+  - `agreement`는 **신규 가입이면 필수** (`GET /terms`로 받은 현행 이용약관)
   - `authorizationCode`는 **애플에서만 필수**. 구글·카카오는 보내지 않는다
 - 응답 200: `{ accessToken, refreshToken, isNewUser, user: { id, name, providers } }`
 - 처리 순서
@@ -158,8 +159,10 @@
 ### 6. GET `/terms`
 
 - 인증 없음 (Public)
-- 응답 200: `[{ id, type: 'SERVICE'|'PRIVACY', version, required, contentUrl }]`
-- 현행 버전만 반환 (`(type, version)` 중 최신). 과거 버전은 동의 이력 보존용으로만 존재
+- 응답 200: `{ id, version, contentUrl }` — 목록이 아니라 **현행 이용약관 1개**
+- 현행 버전만 반환 — 시행 중(`effective_from <= now()`)인 것 중 최신 1개. 과거 버전은 동의 이력 보존용으로만 존재
+- 에러: `TERM_NOT_FOUND`(404) — 시행 중인 이용약관이 없음
+- 개인정보 처리방침은 API가 없다. 앱이 노션 공개 링크로 표시한다
 
 ### 7. GET `/todos?date=YYYY-MM-DD`
 
@@ -228,7 +231,7 @@ B가 더 자연스러운 UX다. 기존 사용자는 약관 화면을 아예 보�
 
 문제는 **5분이 약관 화면 체류 시간의 상한이 된다**는 점이다. 약관과 개인정보 처리방침을 WebView로 띄우는 구조이고, 사용자가 둘 다 열어보면 5분은 넘길 수 있는 시간이다. 넘기면 `invalid_grant`로 로그인이 실패하고 애플 인증부터 다시 해야 한다. 가입 첫 화면에서 가장 겪기 싫은 실패다.
 
-→ **A 확정.** 5분을 UX 예산으로 쓰지 않는다. 기존 사용자에게 약관 화면이 반복 노출되는 문제는 **앱이 최초 설치 시에만 표시**하도록 로컬 플래그로 처리한다. 서버는 `agreements`가 와도 기존 사용자면 기록을 건너뛴다.
+→ **A 확정.** 5분을 UX 예산으로 쓰지 않는다. 기존 사용자에게 약관 화면이 반복 노출되는 문제는 **앱이 최초 설치 시에만 표시**하도록 로컬 플래그로 처리한다. 서버는 `agreement`가 와도 기존 사용자면 기록을 건너뛴다.
 
 ### 5-3. 완료 상태 변경을 boolean 1개로
 
@@ -371,6 +374,7 @@ target_id_type=user_id&target_id={provider_user_id}
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | DTO 검증 실패 |
 | `TERMS_AGREEMENT_REQUIRED` | 400 | 신규 가입인데 필수 약관 동의 누락 |
+| `TERM_NOT_FOUND` | 404 | 시행 중인 이용약관 없음 (`GET /terms`) |
 | `SOCIAL_TOKEN_INVALID` | 401 | 소셜 토큰 검증 실패 |
 | `ACCESS_TOKEN_INVALID` | 401 | Bearer 토큰 무효·만료 |
 | `REFRESH_TOKEN_INVALID` / `_REVOKED` / `_EXPIRED` | 401 | 재발급·로그아웃 |
@@ -421,7 +425,7 @@ target_id_type=user_id&target_id={provider_user_id}
 - [ ] 카카오 어드민 키 인증 공지 확인 — 테스트 도구 한정 변경인지 구현 전 재확인
 - [ ] 탈퇴 유스케이스 테스트 — 제공자별 분기, 해제 실패에도 탈퇴 진행, 카카오 -101 성공 처리
 - [ ] 애플 코드 교환 실패 모니터링 — 실패가 누적되면 해당 사용자들의 탈퇴 시 revoke가 불가능해진다
-- [ ] `terms` 초기 데이터 INSERT 후 `GET /terms` 응답 스펙 고정 — 약관 공개 URL 확정이 선행
+- [ ] `terms` 초기 데이터 INSERT — 이용약관 공개 URL 확정이 선행. 응답은 `{ id, version, contentUrl }` 단일 객체로 확정 (2026-11-13)
 - [ ] 공통 응답 래퍼 · 에러 코드 네이밍을 기존 레포(`common/response`, `common/errors`)와 맞출지 결정
 - [ ] 전역 prefix 사용 여부 확정 — Swagger가 `/api`를 쓰고 있어 충돌 확인 필요
 - [ ] 구글 로그인 OAuth 클라이언트 ID 발급 (iOS / Android / 서버용 별도)

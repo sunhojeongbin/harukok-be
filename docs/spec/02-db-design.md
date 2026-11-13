@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b3029980cabf60cee2697cab6a
-> 원본 최종 수정: 2026-11-13T02:30:23.056Z
+> 원본 최종 수정: 2026-11-13 (이용약관 단일화·006 반영)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🗄️ DB 설계서 (MVP v1)
@@ -7,7 +7,7 @@
 **테이블 6개** · 컬럼 1개 추가 예정(005)
 
 - 대상 DBMS: **PostgreSQL 18+**
-- 마이그레이션 파일: `001__init_schema` / `002__rename_constraints` / `003__todos_soft_delete` / `004__users_name` / `005__social_unlink` (각 `.down.sql` 포함)
+- 마이그레이션 파일: `001__init_schema` / `002__rename_constraints` / `003__todos_soft_delete` / `004__users_name` / `005__social_unlink` / `006__terms_single` (각 `.down.sql` 포함)
 - 001 은 002·003·004 가 모두 반영된 전체 스키마다. 아직 적용 전이면 001 과 005 만 실행하면 된다
 - 검증: PostgreSQL 16으로 문법·제약조건·인덱스·롤백 실행 확인 완료 (uuidv7()만 치환 후 테스트)
 - ⚠️ **005 는 아직 미검증**이다. 적용 전 9장과 같은 절차로 확인할 것
@@ -26,6 +26,7 @@
 | 6 | 소셜 제공자 | 카카오 · 애플 · **구글** 3종 | `CHECK (provider IN ('KAKAO','APPLE','GOOGLE'))` |
 | 7 | 할 일 삭제 되돌리기 | 소프트 삭제 (휴지통 화면 없음) | `todos.deleted_at`  • 부분 인덱스 2개 |
 | 8 | 사용자명 | 소셜 제공값 저장 | `users.name` (NULL 허용, 1\~50자) |
+| 10 | 약관 | 이용약관 1종, 가입 시 동의 1회. 개인정보 처리방침은 앱이 노션 링크로 표시 | `terms.type` · `is_required` 제거, `version` UNIQUE (006) |
 
 \| 9 \| 소셜 연동 해제 \| 애플만 토큰 저장. 카카오는 어드민 키, 구글은 클라이언트 \| `user_social_accounts.provider_refresh_token_enc` (암호문, NULL 허용) \|
 
@@ -122,7 +123,9 @@ CONSTRAINT ck_users_name CHECK (
 
 ### 4. terms / 5. user\_term\_agreements
 
-약관 본문은 DB 에 넣지 않고 `content_url` 만 보관한다. `(type, version)` UNIQUE 로 개정 이력을 누적한다.
+약관은 **이용약관 1종**이다. 본문은 DB 에 넣지 않고 `content_url` 만 보관한다. `version` UNIQUE 로 개정 이력을 누적하고, 시행 중(`effective_from <= now()`)인 최신 1개가 현행 약관이다. 가입에 항상 필수라 `is_required` 는 두지 않는다 (006).
+
+개인정보 처리방침은 DB 에 두지 않는다. 앱이 노션 공개 링크로 표시한다.
 
 ### 6. todos
 
@@ -368,7 +371,8 @@ PostgreSQL 16 에 `uuidv7()` 만 `gen_random_uuid()` 로 치환해 실행한 결
 
 ## 10. 다음 할 일
 
-- [ ] `terms` 초기 데이터 INSERT — 약관 공개 URL 확정 후
+- [ ] `terms` 초기 데이터 INSERT — 이용약관 공개 URL 확정 후 (이용약관 1행)
+- [ ] 006 마이그레이션 작성·검증 — `terms.type` · `is_required` 제거, `uq_terms_version` · `idx_terms_effective_from` 추가 및 롤백
 - [ ] 출시 체크리스트의 **App Privacy · 데이터 보안 양식에 ‘이메일’ 수집 반영**
 - [ ] 개인정보 처리방침에 수집 항목(이메일, 소셜 식별자) 기재
 - [ ] 만료 토큰 정리 배치 등록 (주 1회, `expires_at < now() - interval '30 days'`)

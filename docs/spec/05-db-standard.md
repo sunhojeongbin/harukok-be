@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b3029980b29f69e2202a2f53a6
-> 원본 최종 수정: 2026-11-13T02:30:38.285Z
+> 원본 최종 수정: 2026-11-13 (이용약관 단일화·006 반영)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 📐 DB 표준 (용어사전 · 명명규칙)
@@ -94,7 +94,7 @@ DDL(.sql)  →  이 문서  →  DB 설계서  →  ERD
 | 종류 | 접두사 | 예 |
 | --- | --- | --- |
 | 기본키 | (PostgreSQL 자동) | `users_pkey` |
-| 유니크 제약 | `uq_` | `uq_terms_type_version` |
+| 유니크 제약 | `uq_` | `uq_terms_version` |
 | 유니크 인덱스(부분) | `uq_`  • 조건 접미 | `uq_refresh_tokens_user_id_device_id_active` |
 | 일반 인덱스 | `idx_` | `idx_todos_user_id_due_date` |
 | CHECK | `ck_` | `ck_users_email` |
@@ -139,6 +139,8 @@ DDL(.sql)  →  이 문서  →  DB 설계서  →  ERD
 
 가장 긴 이름이 `uq_refresh_tokens_user_id_device_id_active` 42자라 63바이트 제한 안에 들어간다.
 
+이후 변경 (006, 2026-11-13): 이용약관 단일화로 `terms.type` 이 없어져 `ck_terms_type` 을 제거하고, `uq_terms_type_version` → `uq_terms_version`, `idx_terms_type_effective_from` → `idx_terms_effective_from` 으로 바뀌었다. 위 표는 002 당시 기록이다.
+
 ### 검증 결과
 
 두 경로가 동일한 결과를 내는지 실제 DB 에서 대조했다.
@@ -162,7 +164,7 @@ DDL(.sql)  →  이 문서  →  DB 설계서  →  ERD
 | 사용자 | `users` | 서비스 가입 계정. 소셜 로그인으로만 생성 |
 | 소셜계정연결 | `user_social_accounts` | 제공자별 외부 계정 매핑 |
 | 리프레시토큰 | `refresh_tokens` | 기기별 로그인 세션 |
-| 약관 | `terms` | 약관 버전 |
+| 약관 | `terms` | 이용약관 버전 (개인정보 처리방침은 DB 에 두지 않음) |
 | 약관동의이력 | `user_term_agreements` | 사용자별 동의 기록 |
 | 할일 | `todos` | 날짜별 할 일 |
 
@@ -208,11 +210,9 @@ DDL(.sql)  →  이 문서  →  DB 설계서  →  ERD
 | 논리명 | 물리명 | 도메인 | NULL | 키 |
 | --- | --- | --- | --- | --- |
 | 약관ID | `id` | 식별자 | N | PK |
-| 약관유형 | `type` | 코드 | N | UK |
 | 약관버전 | `version` | 문자열 | N | UK |
 | 약관명 | `title` | 문자열 | N |  |
 | 약관본문URL | `content_url` | URL | N |  |
-| 필수여부 | `is_required` | 여부 | N |  |
 | 시행일시 | `effective_from` | 일시 | N |  |
 | 생성일시 | `created_at` | 일시 | N |  |
 

@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b30299805aa060d68dad259931
-> 원본 최종 수정: 2026-11-13T02:30:32.823Z
+> 원본 최종 수정: 2026-11-13 (이용약관 단일화·006 반영)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🔗 ERD (MVP v1)
@@ -52,11 +52,9 @@ erDiagram
 
     "약관" {
         식별자 약관ID PK
-        코드 약관유형 UK
         문자열 약관버전 UK
         문자열 약관명
         URL 약관본문URL
-        여부 필수여부
         일시 시행일시
         일시 생성일시
     }
@@ -123,11 +121,9 @@ erDiagram
 
     terms {
         uuid id PK "약관ID"
-        varchar type UK "약관유형 · SERVICE / PRIVACY"
-        varchar version UK "약관버전"
+        varchar version UK "약관버전 · 이용약관 1종"
         text title "약관명"
         text content_url "약관본문URL · 외부 공개 페이지"
-        boolean is_required "필수여부"
         timestamptz effective_from "시행일시"
         timestamptz created_at "생성일시"
     }
@@ -173,7 +169,6 @@ erDiagram
 | CHECK | `users.email` | `lower(btrim())` 일치 + 길이 3\~254 |
 | CHECK | `todos.title` | 공백 제외 1\~250자 |
 | CHECK | `user_social_accounts.provider` | `KAKAO` / `APPLE` / `GOOGLE` 만 허용 |
-| CHECK | `terms.type` | `SERVICE` / `PRIVACY` 만 허용 |
 | CHECK | `refresh_tokens` | `expires_at > created_at` |
 | 트리거 | `users`, `todos` | `BEFORE UPDATE` 에 `updated_at` 자동 갱신 |
 | 앱 레벨 | `refresh_tokens` | 활성 기기 **최대 3대** — DB 가 아니라 로그인 트랜잭션이 보장 |

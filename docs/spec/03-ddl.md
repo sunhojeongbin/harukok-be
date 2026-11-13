@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b3029980c78f0dfd3dbb85c4c5
-> 원본 최종 수정: 2026-11-13T02:30:28.141Z
+> 원본 최종 수정: 2026-11-13 (이용약관 단일화·006 반영)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # DDL(MVP v1)
@@ -414,3 +414,91 @@ COMMIT;
 - [ ] NULL 허용 확인 (기존 행이 전부 NULL 로 채워지는지)
 - [ ] 회원 탈퇴 CASCADE 로 이 컬럼까지 파기되는지
 - [ ] 롤백 스크립트 실행 후 잔여 객체·제약 없음
+
+---
+
+## 006 — 이용약관 단일화
+
+약관은 이용약관 1종이다. 개인정보 처리방침은 DB 에 두지 않고 앱이 노션 링크로 표시한다. 가입에 항상 필수이므로 `is_required` 도 둘 필요가 없다. 001 은 이미 적용된 파일이라 고치지 않고 006 으로 바꾼다.
+
+```sql
+-- ============================================================================
+--  하루콕 (HaruKok) — 006 이용약관 단일화
+--  Target   : PostgreSQL 18+
+--  Created  : 2026-11-13
+--  Encoding : UTF-8
+--
+--  적용 : npm run db:migrate
+--  롤백 : npm run db:rollback (harukok_test 대상)
+--
+--  [배경]
+--    약관은 이용약관 1종이다. 개인정보 처리방침은 DB 에 두지 않고 앱이 노션 링크로 표시한다.
+--    GET /terms 는 목록이 아니라 현행 이용약관 1개를 돌려준다.
+--    가입에 항상 필수이므로 is_required 도 없앤다.
+-- ============================================================================
+
+BEGIN;
+
+-- 개인정보 처리방침 행은 더 이상 쓰지 않는다.
+-- 동의 이력이 있으면 user_term_agreements 의 ON DELETE RESTRICT 로 실패한다 — 조용히 지워지지 않는다.
+DELETE FROM terms WHERE type = 'PRIVACY';
+
+DROP INDEX idx_terms_type_effective_from;
+ALTER TABLE terms DROP CONSTRAINT uq_terms_type_version;
+ALTER TABLE terms DROP CONSTRAINT ck_terms_type;
+ALTER TABLE terms DROP COLUMN type;
+ALTER TABLE terms DROP COLUMN is_required;
+
+ALTER TABLE terms ADD CONSTRAINT uq_terms_version UNIQUE (version);
+
+-- 시행일 기준 현행 약관 조회: WHERE effective_from <= now() ORDER BY effective_from DESC LIMIT 1
+CREATE INDEX idx_terms_effective_from ON terms (effective_from DESC);
+
+COMMENT ON TABLE terms IS '이용약관 버전. 개정 시 행을 추가하고 기존 행은 보존한다. 개인정보 처리방침은 DB 에 두지 않는다.';
+
+COMMIT;
+```
+
+### 006 롤백
+
+```sql
+-- ============================================================================
+--  하루콕 (HaruKok) — 006 롤백
+--
+--  ⚠️ 적용 시 지운 PRIVACY 행은 복구되지 않는다. 남은 행은 전부 SERVICE · 필수로 채운다.
+--     복구한 컬럼은 테이블 끝에 붙는다 (컬럼 순서만 001 과 다르다).
+-- ============================================================================
+
+BEGIN;
+
+DROP INDEX idx_terms_effective_from;
+ALTER TABLE terms DROP CONSTRAINT uq_terms_version;
+
+ALTER TABLE terms ADD COLUMN type varchar(20) NOT NULL DEFAULT 'SERVICE';
+ALTER TABLE terms ALTER COLUMN type DROP DEFAULT;
+ALTER TABLE terms ADD COLUMN is_required boolean NOT NULL DEFAULT true;
+
+ALTER TABLE terms ADD CONSTRAINT ck_terms_type CHECK (type IN ('SERVICE', 'PRIVACY'));
+ALTER TABLE terms ADD CONSTRAINT uq_terms_type_version UNIQUE (type, version);
+CREATE INDEX idx_terms_type_effective_from ON terms (type, effective_from DESC);
+
+COMMENT ON TABLE  terms      IS '약관 버전. 개정 시 행을 추가하고 기존 행은 보존한다.';
+COMMENT ON COLUMN terms.type IS 'SERVICE(이용약관) | PRIVACY(개인정보 처리방침)';
+
+COMMIT;
+```
+
+### 006 초기 데이터 (참고)
+
+001 의 초기 데이터 주석은 006 이후 형식이 바뀐다. 이용약관 공개 URL 이 확정되면 새 번호 마이그레이션으로 넣는다.
+
+```sql
+-- INSERT INTO terms (version, title, content_url, effective_from) VALUES
+--   ('1.0', '서비스 이용약관', 'https://<공개 URL>', '2026-01-01T00:00:00+09');
+```
+
+### 006 적용 전 확인할 것
+
+- [ ] `db:check` 왕복 (001 → 005 → 006 → 롤백 → 재적용) 잔여 객체 0 · 재적용 동일
+- [ ] 같은 `version` 두 번 INSERT → `uq_terms_version` 위반으로 거부
+- [ ] PRIVACY 행에 동의 이력이 있으면 적용이 실패하는지 (RESTRICT)
