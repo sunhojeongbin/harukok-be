@@ -85,12 +85,22 @@ async function appliedVersions(client) {
   return r.rows.map((row) => row.version);
 }
 
+/** 파일은 자체 BEGIN/COMMIT 을 가진다. 실패하면 열린 트랜잭션을 되돌려 연결을 다시 쓸 수 있게 한다. */
+async function runFile(client, file) {
+  try {
+    await client.query(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw e;
+  }
+}
+
 async function migrateUp(client, dir) {
   const applied = new Set(await appliedVersions(client));
   const done = [];
   for (const m of listMigrations(dir)) {
     if (applied.has(m.version)) continue;
-    await client.query(fs.readFileSync(m.up, 'utf8'));
+    await runFile(client, m.up);
     await client.query(
       `INSERT INTO ${MIGRATIONS_TABLE} (version) VALUES ($1)`,
       [m.version],
@@ -108,7 +118,7 @@ async function migrateDown(client, dir, { all = false } = {}) {
   for (const version of all ? applied : applied.slice(0, 1)) {
     const m = byVersion.get(version);
     if (!m) throw new Error(`적용 기록은 있으나 파일이 없습니다: ${version}`);
-    await client.query(fs.readFileSync(m.down, 'utf8'));
+    await runFile(client, m.down);
     await client.query(`DELETE FROM ${MIGRATIONS_TABLE} WHERE version = $1`, [
       version,
     ]);

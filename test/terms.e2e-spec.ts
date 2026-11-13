@@ -8,14 +8,6 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { testDatabaseUrl } from './e2e/test-db';
 
-interface TermBody {
-  id: string;
-  type: string;
-  version: string;
-  required: boolean;
-  contentUrl: string;
-}
-
 describe('GET /terms (e2e)', () => {
   let app: INestApplication<App>;
   let db: Client;
@@ -42,99 +34,89 @@ describe('GET /terms (e2e)', () => {
     await app.close();
   });
 
+  /** effectiveFrom·createdAt 은 SQL 식 (now() 기준 상대 시각) */
   async function insertTerm(
-    type: string,
     version: string,
     effectiveFrom: string,
-    isRequired = true,
+    createdAt = 'now()',
   ): Promise<string> {
     const r = await db.query<{ id: string }>(
-      `INSERT INTO terms (type, version, title, content_url, is_required, effective_from)
-       VALUES ($1, $2, $3, $4, $5, ${effectiveFrom}) RETURNING id`,
+      `INSERT INTO terms (version, title, content_url, effective_from, created_at)
+       VALUES ($1, $2, $3, ${effectiveFrom}, ${createdAt}) RETURNING id`,
       [
-        type,
         version,
-        `가짜 ${type} ${version}`,
-        `https://example.com/${type}/${version}`,
-        isRequired,
+        `가짜 이용약관 ${version}`,
+        `https://example.com/terms/${version}`,
       ],
     );
     return r.rows[0].id;
   }
 
-  const getTerms = async () => {
-    const res = await request(app.getHttpServer()).get('/terms');
-    return { status: res.status, body: res.body as TermBody[] };
-  };
+  const getTerms = () => request(app.getHttpServer()).get('/terms');
 
-  it('약관이 없으면 200 []', async () => {
-    await expect(getTerms()).resolves.toEqual({ status: 200, body: [] });
+  it('시행 중인 이용약관이 없으면 404 { code: TERM_NOT_FOUND }', async () => {
+    const res = await getTerms();
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ code: 'TERM_NOT_FOUND' });
   });
 
-  it('유형별 현행 버전만 SERVICE → PRIVACY 순으로, 명세 필드만 돌려준다', async () => {
-    await insertTerm('PRIVACY', '1.0', `now() - interval '30 days'`, false);
-    await insertTerm('SERVICE', '1.0', `now() - interval '30 days'`);
-    const serviceId = await insertTerm(
-      'SERVICE',
-      '1.1',
-      `now() - interval '1 day'`,
-    );
-    const privacyId = await insertTerm(
-      'PRIVACY',
-      '1.1',
-      `now() - interval '1 day'`,
-      false,
-    );
+  it('개정 이력 중 현행 버전 1개를 { id, version, contentUrl } 로만 돌려준다', async () => {
+    await insertTerm('1.0', `now() - interval '30 days'`);
+    const currentId = await insertTerm('1.1', `now() - interval '1 day'`);
 
-    const { status, body } = await getTerms();
+    const res = await getTerms();
 
-    expect(status).toBe(200);
-    expect(body).toEqual([
-      {
-        id: serviceId,
-        type: 'SERVICE',
-        version: '1.1',
-        required: true,
-        contentUrl: 'https://example.com/SERVICE/1.1',
-      },
-      {
-        id: privacyId,
-        type: 'PRIVACY',
-        version: '1.1',
-        required: false,
-        contentUrl: 'https://example.com/PRIVACY/1.1',
-      },
-    ]);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      id: currentId,
+      version: '1.1',
+      contentUrl: 'https://example.com/terms/1.1',
+    });
   });
 
   it('시행일이 미래인 개정본은 아직 내보내지 않는다', async () => {
-    await insertTerm('SERVICE', '1.0', `now() - interval '1 day'`);
-    await insertTerm('SERVICE', '2.0', `now() + interval '7 days'`);
+    await insertTerm('1.0', `now() - interval '1 day'`);
+    await insertTerm('2.0', `now() + interval '7 days'`);
 
-    const { body } = await getTerms();
+    const res = await getTerms();
 
-    expect(body.map((t) => t.version)).toEqual(['1.0']);
+    expect(res.body).toMatchObject({ version: '1.0' });
+  });
+
+  it('미래 시행본만 있으면 404', async () => {
+    await insertTerm('2.0', `now() + interval '7 days'`);
+
+    expect((await getTerms()).status).toBe(404);
+  });
+
+  it('시행일이 같으면 나중에 등록된 버전을 고른다', async () => {
+    const same = `date_trunc('day', now()) - interval '1 day'`;
+    await insertTerm('1.1', same, `now() - interval '2 hours'`);
+    await insertTerm('1.2', same, `now() - interval '1 hour'`);
+
+    const res = await getTerms();
+
+    expect(res.body).toMatchObject({ version: '1.2' });
   });
 
   it('인증 없이 호출할 수 있다 (Authorization 헤더 없음)', async () => {
-    await insertTerm('SERVICE', '1.0', `now() - interval '1 day'`);
+    await insertTerm('1.0', `now() - interval '1 day'`);
 
-    const res = await request(app.getHttpServer()).get('/terms');
-
-    expect(res.status).toBe(200);
+    expect((await getTerms()).status).toBe(200);
   });
 
   describe('임시 시드 (npm run db:seed)', () => {
-    it('두 번 실행해도 한 번만 들어가고, GET /terms 가 임시 약관 2개를 돌려준다', async () => {
+    it('두 번 실행해도 한 번만 들어가고, GET /terms 가 임시 이용약관을 돌려준다', async () => {
       await expect(seedTerms(db)).resolves.toBe(TEMP_TERMS.length);
       await expect(seedTerms(db)).resolves.toBe(0);
 
-      const { body } = await getTerms();
+      const res = await getTerms();
 
-      expect(body.map((t) => t.type)).toEqual(['SERVICE', 'PRIVACY']);
-      for (const t of body) {
-        expect(new URL(t.contentUrl).hostname).toBe('example.com');
-      }
+      expect(res.status).toBe(200);
+      expect(
+        new URL((res.body as { contentUrl: string }).contentUrl).hostname,
+      ).toBe('example.com');
     });
   });
 });

@@ -1,7 +1,8 @@
 'use strict';
 // 로컬 개발용 임시 데이터. 운영에는 넣지 않는다.
 //   node scripts/db-seed.cjs   → DATABASE_URL(로컬 호스트만)에 넣는다. 이미 있으면 건너뛴다.
-// 약관 공개 URL 이 확정되면 실제 약관은 새 번호의 마이그레이션으로 추가한다 (DB 설계서 10장).
+// 이용약관 공개 URL 이 확정되면 실제 약관은 새 번호의 마이그레이션으로 추가한다 (DB 설계서 10장).
+// 약관은 이용약관 1종이다. 개인정보 처리방침은 DB 에 두지 않는다 (006).
 const path = require('node:path');
 const { Client } = require('pg');
 const { loadEnv } = require('./env.cjs');
@@ -10,19 +11,9 @@ const { isLocalHost, parseDbTarget } = require('./lib/db-guard.cjs');
 // example.com 은 예약 도메인이라 실제 서비스에 쓰일 수 없다 — 임시 값이 남아도 바로 드러난다.
 const TEMP_TERMS = [
   {
-    type: 'SERVICE',
     version: '0.1',
     title: '서비스 이용약관 (임시)',
-    contentUrl: 'https://example.com/harukok/terms/service',
-    isRequired: true,
-    effectiveFrom: '2026-11-01T00:00:00+09:00',
-  },
-  {
-    type: 'PRIVACY',
-    version: '0.1',
-    title: '개인정보 처리방침 (임시)',
-    contentUrl: 'https://example.com/harukok/terms/privacy',
-    isRequired: true,
+    contentUrl: 'https://example.com/harukok/terms',
     effectiveFrom: '2026-11-01T00:00:00+09:00',
   },
 ];
@@ -31,10 +22,10 @@ async function seedTerms(client) {
   let inserted = 0;
   for (const t of TEMP_TERMS) {
     const r = await client.query(
-      `INSERT INTO terms (type, version, title, content_url, is_required, effective_from)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT ON CONSTRAINT uq_terms_type_version DO NOTHING`,
-      [t.type, t.version, t.title, t.contentUrl, t.isRequired, t.effectiveFrom],
+      `INSERT INTO terms (version, title, content_url, effective_from)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ON CONSTRAINT uq_terms_version DO NOTHING`,
+      [t.version, t.title, t.contentUrl, t.effectiveFrom],
     );
     inserted += r.rowCount ?? 0;
   }
