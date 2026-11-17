@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b30299801ab97fe1ec4570db74
-> 원본 최종 수정: 2026-11-17 (소셜 로그인 보강 — 애플 name · 토큰 수명 · 카카오 OIDC)
+> 원본 최종 수정: 2026-11-17 (소셜 로그인 보강 — 애플 name · 토큰 수명 · 카카오 OIDC · 약관 자동 동의)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🔌 API 설계서 (MVP v1)
@@ -18,7 +18,7 @@
 | # | 항목 | 결정 | 근거 |
 | --- | --- | --- | --- |
 | 1 | 소셜 로그인 엔드포인트 | 3종 통합 1개 | 3대 제한·약관 동의·토큰 발급 로직이 완전히 동일. 분리하면 같은 유스케이스가 3벌 |
-| 2 | 약관 동의 흐름 | 선(先)동의 — 로그인 요청에 포함 | 애플 `authorizationCode`의 5분 유효기간이 약관 체류 시간의 상한이 되면 안 된다 (5-2) |
+| 2 | 약관 동의 흐름 | **자동 동의** — 신규 가입 시 서버가 현행 이용약관 동의를 기록 (2026-11-17 변경) | 로그인할 때 약관을 확인하는 화면이 없다. 요청에 동의 필드를 두지 않는다 (5-2) |
 | 3 | 자동 로그인 판정 | 전용 API 없음 — 토큰 재발급 재사용 | 스플래시에서 재발급 성공 = 유효 세션 |
 | 4 | 다중 기기 3대 제한 | 전용 API 없음 — 로그인 트랜잭션 내부 | DB 설계서 6장 쿼리를 로그인 유스케이스에 그대로 구현 |
 | 5 | 할 일 단건 조회 | 만들지 않음 | 작성 화면은 목록에서 넘어온 데이터로 채운다 |
@@ -37,7 +37,7 @@
 | 화면 | 기능명 | API |
 | --- | --- | --- |
 | 로그인 | 카카오 / 애플 / 구글 로그인 | `POST /auth/social/login` |
-| 로그인 | 약관 동의 | `GET /terms`  • 위 요청의 `agreement` |
+| 로그인 | 약관 동의 | 전용 API 없음 — 신규 가입 시 서버가 자동 기록. 본문 링크는 `GET /terms` |
 | 로그인 | 토큰 재발급 | `POST /auth/token/refresh` |
 | 로그인 | 다중 로그인 (최대 3대) | 전용 API 없음 — 로그인 트랜잭션 |
 | 스플래시 | 자동 로그인 판정 | `POST /auth/token/refresh` |
@@ -71,7 +71,7 @@
 
 | # | Method | Path | 인증 | 설명 |
 | --- | --- | --- | --- | --- |
-| 1 | POST | `/auth/social/login` | 없음 | 소셜 가입·로그인 + 약관 동의 + 기기 등록 |
+| 1 | POST | `/auth/social/login` | 없음 | 소셜 가입·로그인 + 약관 자동 동의 + 기기 등록 |
 | 2 | POST | `/auth/token/refresh` | 없음 (refreshToken) | 액세스 토큰 재발급 + 로테이션 |
 | 3 | POST | `/auth/logout` | Bearer | 현재 기기 refresh 토큰 폐기 |
 | 4 | GET | `/users/me` | Bearer | 사용자명 · 로그인 제공자 조회 |
@@ -89,7 +89,7 @@
 | 11 | DELETE | `/todos/{todoId}` | Bearer | 소프트 삭제 |
 | 12 | POST | `/todos/{todoId}/restore` | Bearer | 삭제 되돌리기 |
 
-`/terms`를 둔 이유: 약관 **본문**은 WebView(서버 개발 없음)지만, 동의 이력에 저장할 `terms.id`와 `version`은 서버가 알려줘야 한다. 앱에 하드코딩하면 약관 개정 시 앱 업데이트 없이는 반영되지 않는다. DB 설계서가 `version` UNIQUE로 개정 이력을 누적하도록 잡아둔 것과 짝이 맞는다. 약관은 **이용약관 1종**이다. 개인정보 처리방침은 동의 이력을 두지 않고 앱이 노션 링크로 보여준다.
+`/terms`를 둔 이유: 약관 **본문**은 WebView(서버 개발 없음)지만, 현행 약관의 링크와 버전은 서버가 알려줘야 한다. 앱에 하드코딩하면 약관 개정 시 앱 업데이트 없이는 반영되지 않는다. 동의 이력은 가입 시 서버가 같은 현행 약관(`terms.id`)로 기록한다. DB 설계서가 `version` UNIQUE로 개정 이력을 누적하도록 잡아둔 것과 짝이 맞는다. 약관은 **이용약관 1종**이다. 개인정보 처리방침은 동의 이력을 두지 않고 앱이 노션 링크로 보여준다.
 
 ---
 
@@ -99,20 +99,21 @@
 
 ### 1. POST `/auth/social/login`
 
-- 요청: `{ provider: 'KAKAO'|'APPLE'|'GOOGLE', idToken, authorizationCode?, name?, deviceId, agreement?: { termId, version } }`
+- 요청: `{ provider: 'KAKAO'|'APPLE'|'GOOGLE', idToken, authorizationCode?, name?, deviceId }`
   - `idToken`은 카카오·구글은 OIDC `id_token`, 애플은 `identityToken`
   - `name`은 **애플 최초 가입에서만** 보낸다 — 애플은 이름을 `identityToken`에 넣지 않고 최초 인가 때 SDK로만 준다. 카카오·구글은 `idToken`의 이름을 쓰고 이 필드는 무시한다
-  - `agreement`는 **신규 가입이면 필수** (`GET /terms`로 받은 현행 이용약관)
   - `authorizationCode`는 **애플에서만 필수**. 구글·카카오는 보내지 않는다
 - 응답 200: `{ accessToken, refreshToken, isNewUser, user: { id, name, providers } }`
 - 처리 순서
   1. `idToken` 검증 → 제공자 식별자(`provider_user_id`) 추출
-  2. `user_social_accounts` 조회 → 없으면 신규. 신규인데 필수 약관 동의 누락이면 거부
+  2. `user_social_accounts` 조회 → 없으면 신규
   3. **애플만** — `authorizationCode`를 `/auth/token`으로 교환해 refresh token 확보 → 암호화 후 `user_social_accounts.provider_refresh_token_enc`에 저장 (5-6)
   4. 소셜 응답의 이메일 `lower(btrim())`, 이름 HTML 제거 후 50자 절삭하여 저장 (애플 이름은 요청 `name`)
-  5. 약관 동의 이력 기록 (`user_term_agreements`)
+  5. **신규 가입이면** 현행 이용약관(`GET /terms` 와 같은 판정)에 자동 동의로 기록 (`user_term_agreements`). 기존 사용자는 기록하지 않는다
+     - 시행 중인 약관이 없으면 **가입을 막지 않는다** — 기록 없이 진행하고 에러 로그를 남긴다
+     - 동의 이력이 하나도 없는 사용자는 **다음 로그인 때** 현행 약관으로 기록한다 (누락 보충, `agreed_at` 은 보충한 시각)
   6. 기기 토큰 트랜잭션 (DB 설계서 6장) → 3대 초과 시 가장 오래된 기기 자동 폐기
-- 에러: `SOCIAL_TOKEN_INVALID`(401) · `TERMS_AGREEMENT_REQUIRED`(400) · `VALIDATION_FAILED`(400)
+- 에러: `SOCIAL_TOKEN_INVALID`(401) · `VALIDATION_FAILED`(400)
 - ⚠️ 애플은 이메일과 이름을 **최초 인가 1회에만** 전달한다. 2번에서 신규 판정이 나면 그 자리에서 저장해야 한다
 - ⚠️ `authorizationCode`는 **5분 만료 · 단일 사용**이다. 받아서 보관하는 값이 아니라 이 요청 안에서 즉시 교환해야 한다
 - ⚠️ 3번 교환이 실패해도 **로그인은 진행한다.** 가입 첫 화면을 서버 설정 문제로 막지 않는다. 대신 `provider_refresh_token_enc`가 NULL로 남아 그 사용자는 탈퇴 시 수동 revoke 경로로 떨어지므로, 실패는 반드시 에러 로그·알림 대상으로 둔다
@@ -221,6 +222,8 @@
 제공자 추가(네이버 등)는 전략 클래스 1개 + `CHECK` 제약 교체로 끝난다. DB 설계서 5-3이 ENUM 대신 `varchar + CHECK`를 택한 것과 같은 이유다.
 
 ### 5-2. 약관 동의는 선(先)동의 — 애플 때문이다 ⚠️
+
+> 🔄 **2026-11-17 변경 — 자동 동의.** 로그인할 때 약관을 확인하는 화면이 없어, 요청의 동의 필드(`agreement`)와 `TERMS_AGREEMENT_REQUIRED` 를 없앴다. 신규 가입 시 서버가 현행 이용약관 동의를 기록한다. 아래는 당시 검토 기록이다 — 동의 화면을 다시 두게 되면 A(선동의)가 기준이다.
 
 "최초 가입 시 필수 약관 동의 없이는 진행 불가"를 구현하는 두 방식.
 
@@ -377,7 +380,6 @@ target_id_type=user_id&target_id={provider_user_id}
 | 코드 | HTTP | 발생 지점 |
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 400 | DTO 검증 실패 |
-| `TERMS_AGREEMENT_REQUIRED` | 400 | 신규 가입인데 필수 약관 동의 누락 |
 | `TERM_NOT_FOUND` | 404 | 시행 중인 이용약관 없음 (`GET /terms`) |
 | `SOCIAL_TOKEN_INVALID` | 401 | 소셜 토큰 검증 실패 |
 | `ACCESS_TOKEN_INVALID` | 401 | Bearer 토큰 무효·만료 |
