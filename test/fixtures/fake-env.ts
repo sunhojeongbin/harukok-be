@@ -29,5 +29,6 @@ export function fakeEnv(): Record<string, string> {
     GOOGLE_CLIENT_IDS:
       'fake-ios.apps.googleusercontent.com,fake-android.apps.googleusercontent.com',
     KAKAO_APP_KEYS: 'fake-kakao-native-app-key',
+    KAKAO_ADMIN_KEY: 'fake-kakao-admin-key',
   };
 }

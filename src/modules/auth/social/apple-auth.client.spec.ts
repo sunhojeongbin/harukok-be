@@ -2,6 +2,7 @@ import { decodeProtectedHeader, jwtVerify } from 'jose';
 import { fakeAppleKeyPair } from '../../../../test/fixtures/fake-env';
 import {
   type AppleAuthConfig,
+  APPLE_REVOKE_URL,
   APPLE_TOKEN_URL,
   type FetchFn,
   HttpAppleAuthClient,
@@ -105,5 +106,66 @@ describe('HttpAppleAuthClient.exchangeCode', () => {
     await expect(client.exchangeCode('fake-code')).rejects.toThrow(
       'fake network',
     );
+  });
+});
+
+describe('HttpAppleAuthClient.revoke (탈퇴)', () => {
+  it('refresh token 을 /auth/revoke 에 form 으로 보낸다 (token_type_hint=refresh_token)', async () => {
+    const { client, fetchFn } = setup(() =>
+      Promise.resolve(new Response('', { status: 200 })),
+    );
+
+    await expect(client.revoke('fake-apple-refresh')).resolves.toBeUndefined();
+
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe(APPLE_REVOKE_URL);
+    expect(init.method).toBe('POST');
+    const body = new URLSearchParams(init.body as string);
+    expect(body.get('token')).toBe('fake-apple-refresh');
+    expect(body.get('token_type_hint')).toBe('refresh_token');
+    expect(body.get('client_id')).toBe('com.example.fake.harukok');
+  });
+
+  it('client_secret 은 교환과 같은 ES256 JWT 다 (요청마다 서명)', async () => {
+    const { client, fetchFn, publicKey } = setup(() =>
+      Promise.resolve(new Response('', { status: 200 })),
+    );
+
+    await client.revoke('fake-apple-refresh');
+
+    const body = new URLSearchParams(fetchFn.mock.calls[0][1].body as string);
+    await expect(
+      jwtVerify(body.get('client_secret') ?? '', publicKey, {
+        currentDate: new Date(NOW),
+        issuer: 'FAKETEAM01',
+        subject: 'com.example.fake.harukok',
+        audience: 'https://appleid.apple.com',
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('애플이 4xx 를 주면 실패한다 (상태만, 토큰 값은 메시지에 넣지 않음)', async () => {
+    const { client } = setup(json(400, { error: 'invalid_client' }));
+
+    const error = await client.revoke('fake-apple-refresh').then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+    expect(error?.message).toMatch(/400.*invalid_client/);
+    expect(error?.message).not.toContain('fake-apple-refresh');
+  });
+
+  it('5xx 면 한 번 더 시도한다', async () => {
+    const responses = [
+      new Response('', { status: 503 }),
+      new Response('', { status: 200 }),
+    ];
+    const { client, fetchFn } = setup(() =>
+      Promise.resolve(responses.shift() as Response),
+    );
+
+    await expect(client.revoke('fake-apple-refresh')).resolves.toBeUndefined();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 });

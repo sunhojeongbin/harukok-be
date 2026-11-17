@@ -85,6 +85,17 @@
 - Bearer 없음·만료 → 401 `ACCESS_TOKEN_INVALID` (액세스 토큰은 1시간이면 만료 — 재발급으로 새로 받는다)
 - 다른 사용자의 토큰이거나 `deviceId` 가 다르면 → 401 `REFRESH_TOKEN_INVALID`
 
+### 내 정보 — `GET /users/me` (Bearer)
+
+- 200 `{ id, name, email, providers, createdAt }`. 테스트 계정이면 `name: "테스트 계정"`, `providers: ["GOOGLE"]`
+
+### 탈퇴 — `DELETE /users/me` (Bearer)
+
+- 204. 연동 해제(애플 revoke · 카카오 unlink) → 사용자 삭제. CASCADE 로 소셜 계정 · 약관 동의 · 토큰 · 할 일이 모두 지워진다
+- 테스트 계정은 GOOGLE 이라 서버가 외부 호출을 하지 않는다 (구글은 앱이 SDK 로 해제)
+- 탈퇴 후 같은 액세스 토큰(최대 1시간 유효)으로 부르면 404 `USER_NOT_FOUND`, 리프레시 토큰은 401 `REFRESH_TOKEN_INVALID`
+- ⚠️ **테스트 계정이 지워진다.** 다시 쓰려면 `npm run db:seed` (또는 테스트 토큰으로 다시 로그인하면 새로 만들어진다)
+
 ## 4. 기기 3대 제한 확인
 
 `deviceId` 를 바꿔 가며 로그인해 본다.

@@ -40,7 +40,7 @@ function commaList(value: unknown): unknown {
     : value;
 }
 
-// 단위가 늘면 실제로 쓰는 키만 여기에 추가한다 (카카오 어드민 키는 4단위).
+// 단위가 늘면 실제로 쓰는 키만 여기에 추가한다.
 export class EnvironmentVariables {
   @IsOptional()
   @IsIn(NODE_ENVS)
@@ -93,6 +93,11 @@ export class EnvironmentVariables {
   @Transform(({ value }: { value: unknown }) => commaList(value))
   @ArrayNotEmpty()
   KAKAO_APP_KEYS: string[];
+
+  /** 탈퇴 시 카카오 unlink (서버 → 카카오, 사용자 토큰 불필요) */
+  @IsString()
+  @IsNotEmpty()
+  KAKAO_ADMIN_KEY: string;
 
   /** 개발 전용 테스트 로그인 (docs/guides/swagger-social-login.md). 'true'·'false' 만 받는다. 운영에서는 켤 수 없다 */
   @Transform(({ value }: { value: unknown }) =>
