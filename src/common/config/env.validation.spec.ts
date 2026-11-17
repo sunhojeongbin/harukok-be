@@ -132,4 +132,55 @@ describe('validateEnv', () => {
       expect(env.KAKAO_APP_KEYS).toEqual(['k1']);
     });
   });
+
+  describe('DEV_TEST_LOGIN (개발 전용 테스트 로그인)', () => {
+    it('없으면 꺼짐(false)', () => {
+      expect(
+        validateEnv(withRest({ DATABASE_URL: VALID_URL })).DEV_TEST_LOGIN,
+      ).toBe(false);
+    });
+
+    it.each([
+      ['true', true],
+      ['false', false],
+    ])('%s → %s', (value, expected) => {
+      expect(
+        validateEnv(
+          withRest({ DATABASE_URL: VALID_URL, DEV_TEST_LOGIN: value }),
+        ).DEV_TEST_LOGIN,
+      ).toBe(expected);
+    });
+
+    it('true·false 가 아니면 실패한다 (yes, 1 등 오타를 켜짐으로 읽지 않는다)', () => {
+      expect(() =>
+        validateEnv(
+          withRest({ DATABASE_URL: VALID_URL, DEV_TEST_LOGIN: 'yes' }),
+        ),
+      ).toThrow(/DEV_TEST_LOGIN/);
+    });
+
+    it('운영(NODE_ENV=production)에서 켜면 부팅을 막는다', () => {
+      expect(() =>
+        validateEnv(
+          withRest({
+            DATABASE_URL: VALID_URL,
+            NODE_ENV: 'production',
+            DEV_TEST_LOGIN: 'true',
+          }),
+        ),
+      ).toThrow(/DEV_TEST_LOGIN/);
+    });
+
+    it('운영에서 꺼 두는 것은 괜찮다', () => {
+      expect(
+        validateEnv(
+          withRest({
+            DATABASE_URL: VALID_URL,
+            NODE_ENV: 'production',
+            DEV_TEST_LOGIN: 'false',
+          }),
+        ).DEV_TEST_LOGIN,
+      ).toBe(false);
+    });
+  });
 });
