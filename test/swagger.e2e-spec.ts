@@ -10,7 +10,14 @@ interface OpenApiDoc {
   info: { title: string };
   paths: Record<
     string,
-    Record<string, { responses: Record<string, unknown>; tags?: string[] }>
+    Record<
+      string,
+      {
+        responses: Record<string, unknown>;
+        tags?: string[];
+        security?: Record<string, string[]>[];
+      }
+    >
   >;
   components: { securitySchemes?: Record<string, { scheme?: string }> };
 }
@@ -81,6 +88,30 @@ describe('Swagger /docs (e2e)', () => {
         '400',
         '401',
       ]);
+    });
+
+    it('POST /auth/token/refresh 는 200·400·401, 인증 없음', () => {
+      const refresh = doc.paths['/auth/token/refresh']?.post;
+
+      expect(refresh?.tags).toEqual(['auth']);
+      expect(Object.keys(refresh?.responses ?? {}).sort()).toEqual([
+        '200',
+        '400',
+        '401',
+      ]);
+      expect(refresh?.security).toBeUndefined();
+    });
+
+    it('POST /auth/logout 은 204·400·401 이고 Bearer 를 요구한다', () => {
+      const logout = doc.paths['/auth/logout']?.post;
+
+      expect(logout?.tags).toEqual(['auth']);
+      expect(Object.keys(logout?.responses ?? {}).sort()).toEqual([
+        '204',
+        '400',
+        '401',
+      ]);
+      expect(logout?.security).toEqual([{ bearer: [] }]);
     });
 
     it('Bearer 인증 스키마를 등록한다', () => {
