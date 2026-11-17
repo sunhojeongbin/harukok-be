@@ -3,6 +3,7 @@ import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsBase64,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -92,6 +93,13 @@ export class EnvironmentVariables {
   @Transform(({ value }: { value: unknown }) => commaList(value))
   @ArrayNotEmpty()
   KAKAO_APP_KEYS: string[];
+
+  /** 개발 전용 테스트 로그인 (docs/guides/swagger-social-login.md). 'true'·'false' 만 받는다. 운영에서는 켤 수 없다 */
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  @IsBoolean()
+  DEV_TEST_LOGIN: boolean = false;
 }
 
 /** 부팅 시 환경변수 검증. 오류에는 키 이름만 담고 값은 넣지 않는다 (시크릿 노출 방지). */
@@ -103,6 +111,11 @@ export function validateEnv(
   if (errors.length > 0) {
     const keys = errors.map((e) => e.property).join(', ');
     throw new Error(`환경변수가 없거나 올바르지 않습니다: ${keys}`);
+  }
+  if (env.NODE_ENV === 'production' && env.DEV_TEST_LOGIN) {
+    throw new Error(
+      '환경변수가 올바르지 않습니다: DEV_TEST_LOGIN 은 운영(NODE_ENV=production)에서 켤 수 없습니다.',
+    );
   }
   return env;
 }

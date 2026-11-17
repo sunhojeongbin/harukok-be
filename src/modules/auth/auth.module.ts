@@ -13,6 +13,7 @@ import {
   OidcSocialTokenVerifier,
   remoteOidcConfigs,
 } from './social/oidc-token-verifier';
+import { withDevTestLogin } from './social/dev-test-login';
 import { SOCIAL_TOKEN_VERIFIER } from './social/social-identity';
 import { TokenIssuer } from './tokens/token-issuer';
 import { SocialLoginUseCase } from './usecases/social-login.usecase';
@@ -29,12 +30,18 @@ type Config = ConfigService<EnvironmentVariables, true>;
       provide: SOCIAL_TOKEN_VERIFIER,
       inject: [ConfigService],
       useFactory: (config: Config) =>
-        new OidcSocialTokenVerifier(
-          remoteOidcConfigs({
-            APPLE_CLIENT_ID: config.get('APPLE_CLIENT_ID', { infer: true }),
-            GOOGLE_CLIENT_IDS: config.get('GOOGLE_CLIENT_IDS', { infer: true }),
-            KAKAO_APP_KEYS: config.get('KAKAO_APP_KEYS', { infer: true }),
-          }),
+        withDevTestLogin(
+          new OidcSocialTokenVerifier(
+            remoteOidcConfigs({
+              APPLE_CLIENT_ID: config.get('APPLE_CLIENT_ID', { infer: true }),
+              GOOGLE_CLIENT_IDS: config.get('GOOGLE_CLIENT_IDS', {
+                infer: true,
+              }),
+              KAKAO_APP_KEYS: config.get('KAKAO_APP_KEYS', { infer: true }),
+            }),
+          ),
+          // 개발 전용. 운영에서는 env 검증이 켜지 못하게 막는다
+          config.get('DEV_TEST_LOGIN', { infer: true }),
         ),
     },
     {

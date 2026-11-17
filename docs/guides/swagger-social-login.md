@@ -1,0 +1,104 @@
+# Swagger 로 소셜 로그인 테스트하기
+
+`POST /auth/social/login` 은 카카오·애플·구글이 서명한 `idToken` 을 검증한다. 로컬에서는 진짜 토큰을 구하기 번거로우므로 **개발 전용 테스트 로그인**을 쓴다. 테스트 계정은 [test-account.md](test-account.md) 참고.
+
+> 명세 원본은 `docs/spec/01-api.md` 4장 1번이다. 이 문서는 로컬 테스트 방법만 다룬다.
+
+## 1. 준비 (처음 한 번)
+
+1. 로컬 DB 와 `.env` 설정은 [setup-local.md](../setup-local.md) 를 따른다
+2. `.env` 에 테스트 로그인을 켠다
+
+   ```bash
+   DEV_TEST_LOGIN=true
+   ```
+
+   - `true`·`false` 만 받는다 (`yes`, `1` 은 부팅 실패)
+   - **운영(`NODE_ENV=production`)에서 `true` 면 서버가 뜨지 않는다.** 실수로 켠 채 배포하는 것을 막기 위해서다
+   - 켜면 기동 로그에 `DEV_TEST_LOGIN 이 켜져 있다` 경고가 찍힌다
+
+3. 스키마와 임시 데이터를 넣는다
+
+   ```bash
+   npm run db:migrate
+   npm run db:seed      # 임시 이용약관 + 테스트 계정
+   ```
+
+4. 서버를 띄운다: `npm run start:dev`
+
+## 2. Swagger 에서 로그인
+
+1. 브라우저로 `http://localhost:3000/docs` 를 연다 (운영에서는 Swagger 가 꺼져 있다)
+2. **auth → POST /auth/social/login → Try it out**
+3. 요청 본문에 아래를 넣고 **Execute**
+
+   ```json
+   {
+     "provider": "GOOGLE",
+     "idToken": "dev-test-token",
+     "deviceId": "swagger"
+   }
+   ```
+
+4. 200 응답 예
+
+   ```json
+   {
+     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+     "refreshToken": "q3Z...43자",
+     "isNewUser": false,
+     "user": {
+       "id": "019a...",
+       "name": "테스트 계정",
+       "providers": ["GOOGLE"]
+     }
+   }
+   ```
+
+   - `db:seed` 를 안 했으면 첫 로그인 때 테스트 계정이 만들어지고 `isNewUser: true`
+   - 신규 가입이면 현행 이용약관에 자동 동의로 기록된다 (`user_term_agreements`)
+
+## 3. 받은 토큰 쓰기
+
+| 토큰           | 수명  | 쓰는 곳                                                                                                 |
+| -------------- | ----- | ------------------------------------------------------------------------------------------------------- |
+| `accessToken`  | 1시간 | Swagger 오른쪽 위 **Authorize** 에 붙여 넣으면 `Authorization: Bearer` 로 붙는다 (3단위부터 Bearer API) |
+| `refreshToken` | 30일  | 재발급·로그아웃 요청 본문 (3단위)                                                                       |
+
+## 4. 기기 3대 제한 확인
+
+`deviceId` 를 바꿔 가며 로그인해 본다.
+
+- 같은 `deviceId` 로 다시 로그인 → 그 기기의 이전 리프레시 토큰이 폐기된다 (기기당 1개)
+- 서로 다른 `deviceId` 4개로 로그인 → 가장 오래된 기기의 토큰이 폐기되고 활성은 3대
+
+DB 에서 확인 (DBeaver 등):
+
+```sql
+SELECT device_id, created_at, revoked_at
+  FROM refresh_tokens
+ WHERE user_id = (SELECT user_id FROM user_social_accounts
+                   WHERE provider = 'GOOGLE' AND provider_user_id = 'dev-test-user')
+ ORDER BY created_at;
+```
+
+## 5. 오류 응답 확인
+
+| 보내는 것                                               | 응답                                                   |
+| ------------------------------------------------------- | ------------------------------------------------------ |
+| `"idToken": "아무거나"`                                 | 401 `SOCIAL_TOKEN_INVALID`                             |
+| `"provider": "KAKAO"` 또는 `"APPLE"` + `dev-test-token` | 401 `SOCIAL_TOKEN_INVALID` — 테스트 토큰은 GOOGLE 전용 |
+| `"provider": "NAVER"`                                   | 400 `VALIDATION_FAILED`                                |
+| `"deviceId": "   "` 또는 129자 이상                     | 400 `VALIDATION_FAILED`                                |
+| 정의되지 않은 필드 (예: `agreement`)                    | 400 `VALIDATION_FAILED`                                |
+| `DEV_TEST_LOGIN=false` 인 서버에 `dev-test-token`       | 401 `SOCIAL_TOKEN_INVALID`                             |
+
+## 6. 테스트 로그인으로 확인할 수 없는 것
+
+테스트 토큰은 **토큰 검증 단계만 건너뛴다**. 아래는 실제 제공자 토큰이 있어야 확인된다.
+
+- 카카오·애플·구글 JWKS 서명 · `iss` · `aud` 검증 (단위 테스트는 테스트용 키로 검증한다)
+- 애플 `authorizationCode` 교환과 refresh token 암호화 저장 (e2e 는 가짜 애플 클라이언트로 검증한다)
+- 실제 이름·이메일 클레임
+
+실제 키(`.env` 의 `APPLE_*` · `GOOGLE_CLIENT_IDS` · `KAKAO_APP_KEYS`)를 발급받은 뒤 앱이나 OAuth Playground 로 받은 토큰을 같은 방법으로 넣으면 된다.
