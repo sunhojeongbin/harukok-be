@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b30299801ab97fe1ec4570db74
-> 원본 최종 수정: 2026-11-17 (세션 — 재발급 판정 순서 · 슬라이딩 30일 · 로그아웃 deviceId)
+> 원본 최종 수정: 2026-11-17 (할 일 — 완료 변경 · 삭제 멱등)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🔌 API 설계서 (MVP v1)
@@ -200,13 +200,16 @@
 
 - 요청: `{ completed: boolean }`
 - 응답 200: `{ id, completedAt }`
-- `true` → `completed_at = now()`, `false` → `NULL`
-- 멱등. 같은 값을 다시 보내도 200 (체크 연타·오프라인 재전송 대비)
+- `true` → `completed_at = COALESCE(completed_at, now())` — 이미 완료면 **처음 완료 시각 유지**, `false` → `NULL`
+- 멱등. 같은 값을 다시 보내도 200, 결과도 같다 (체크 연타·오프라인 재전송 대비)
+- 에러: `TODO_NOT_FOUND`(404) — 타인 소유·소프트 삭제된 건도 동일
 
 ### 11. DELETE `/todos/{todoId}`
 
 - 응답 204
 - `UPDATE todos SET deleted_at = now() WHERE id = $todoId AND user_id = $userId AND deleted_at IS NULL`
+- 멱등 — 이미 삭제한 내 할 일이면 0건 영향, 그대로 204 (삭제 시각은 처음 것 유지, 5-4 재전송 안전)
+- 에러: `TODO_NOT_FOUND`(404) — 없거나 타인 소유 (하드 삭제된 뒤 포함)
 - 하드 삭제는 정리 배치(7일 경과)만 수행
 
 ### 12. POST `/todos/{todoId}/restore`
