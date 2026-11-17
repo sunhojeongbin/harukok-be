@@ -72,6 +72,17 @@ describe('Swagger /docs (e2e)', () => {
       ]);
     });
 
+    it('POST /auth/social/login 을 auth 태그와 200·400·401 응답으로 담는다', () => {
+      const login = doc.paths['/auth/social/login']?.post;
+
+      expect(login?.tags).toEqual(['auth']);
+      expect(Object.keys(login?.responses ?? {}).sort()).toEqual([
+        '200',
+        '400',
+        '401',
+      ]);
+    });
+
     it('Bearer 인증 스키마를 등록한다', () => {
       expect(doc.components.securitySchemes?.bearer?.scheme).toBe('bearer');
     });

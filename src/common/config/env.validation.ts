@@ -1,18 +1,45 @@
 import 'reflect-metadata';
-import { plainToInstance, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
+  IsBase64,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
+  IsString,
   Matches,
   Max,
   Min,
+  MinLength,
+  Validate,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
   validateSync,
 } from 'class-validator';
 
 const NODE_ENVS = ['development', 'test', 'production'] as const;
 
-// 단위가 늘면 실제로 쓰는 키만 여기에 추가한다 (JWT·제공자 키는 2~4단위).
+@ValidatorConstraint({ name: 'decodesTo32Bytes' })
+class DecodesTo32Bytes implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return (
+      typeof value === 'string' && Buffer.from(value, 'base64').length === 32
+    );
+  }
+}
+
+/** "a, b," → ['a', 'b']. 문자열이 아니면 그대로 둔다(검증이 거부) */
+function commaList(value: unknown): unknown {
+  return typeof value === 'string'
+    ? value
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s !== '')
+    : value;
+}
+
+// 단위가 늘면 실제로 쓰는 키만 여기에 추가한다 (카카오 어드민 키는 4단위).
 export class EnvironmentVariables {
   @IsOptional()
   @IsIn(NODE_ENVS)
@@ -26,6 +53,45 @@ export class EnvironmentVariables {
   @Min(1)
   @Max(65535)
   PORT: number = 3000;
+
+  @IsString()
+  @MinLength(32)
+  JWT_ACCESS_SECRET: string;
+
+  /** AES-256-GCM 키: base64 32바이트 */
+  @IsBase64()
+  @Validate(DecodesTo32Bytes)
+  TOKEN_ENCRYPTION_KEY: string;
+
+  @IsString()
+  @IsNotEmpty()
+  APPLE_TEAM_ID: string;
+
+  @IsString()
+  @IsNotEmpty()
+  APPLE_KEY_ID: string;
+
+  /** .p8 내용. 환경변수에서 흔한 이스케이프 줄바꿈(\n)을 실제 줄바꿈으로 바꾼다 */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.replace(/\\n/g, '\n') : value,
+  )
+  @Matches(/-----BEGIN PRIVATE KEY-----[\s\S]+-----END PRIVATE KEY-----/)
+  APPLE_PRIVATE_KEY: string;
+
+  /** 네이티브 앱 번들 ID (Service ID 아님) */
+  @IsString()
+  @IsNotEmpty()
+  APPLE_CLIENT_ID: string;
+
+  /** iOS·Android·서버 OAuth 클라이언트 ID — 쉼표 구분 */
+  @Transform(({ value }: { value: unknown }) => commaList(value))
+  @ArrayNotEmpty()
+  GOOGLE_CLIENT_IDS: string[];
+
+  /** 카카오 OIDC id_token 의 aud (앱 키) — 쉼표 구분 */
+  @Transform(({ value }: { value: unknown }) => commaList(value))
+  @ArrayNotEmpty()
+  KAKAO_APP_KEYS: string[];
 }
 
 /** 부팅 시 환경변수 검증. 오류에는 키 이름만 담고 값은 넣지 않는다 (시크릿 노출 방지). */
