@@ -65,6 +65,26 @@
 | `accessToken`  | 1시간 | Swagger 오른쪽 위 **Authorize** 에 붙여 넣으면 `Authorization: Bearer` 로 붙는다 (3단위부터 Bearer API) |
 | `refreshToken` | 30일  | 재발급·로그아웃 요청 본문 (3단위)                                                                       |
 
+### 재발급 — `POST /auth/token/refresh` (인증 없음)
+
+```json
+{ "refreshToken": "<로그인 응답의 refreshToken>", "deviceId": "swagger" }
+```
+
+- 200 이면 **새** `accessToken` · `refreshToken` 을 받는다. 이전 `refreshToken` 은 폐기된다 — 다음 재발급에는 새 것을 쓴다
+- 새 리프레시 토큰은 지금부터 다시 30일 (슬라이딩)
+- 이전 토큰을 다시 보내면 **재사용**으로 판정돼 401 `REFRESH_TOKEN_REVOKED` 이고, 그 기기의 새 세션까지 폐기된다 → 다시 로그인
+- `deviceId` 는 로그인 때와 같아야 한다 (다르면 401 `REFRESH_TOKEN_INVALID`)
+
+### 로그아웃 — `POST /auth/logout` (Bearer 필요)
+
+1. **Authorize** 에 `accessToken` 을 넣는다 (자물쇠 아이콘)
+2. 본문은 재발급과 같다: `{ "refreshToken": "...", "deviceId": "swagger" }`
+3. 204 — 그 기기의 리프레시 토큰이 폐기된다. 같은 요청을 다시 보내도 204 (멱등)
+
+- Bearer 없음·만료 → 401 `ACCESS_TOKEN_INVALID` (액세스 토큰은 1시간이면 만료 — 재발급으로 새로 받는다)
+- 다른 사용자의 토큰이거나 `deviceId` 가 다르면 → 401 `REFRESH_TOKEN_INVALID`
+
 ## 4. 기기 3대 제한 확인
 
 `deviceId` 를 바꿔 가며 로그인해 본다.

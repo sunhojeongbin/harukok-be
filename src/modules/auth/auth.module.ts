@@ -16,7 +16,10 @@ import {
 import { withDevTestLogin } from './social/dev-test-login';
 import { SOCIAL_TOKEN_VERIFIER } from './social/social-identity';
 import { TokenIssuer } from './tokens/token-issuer';
+import { LogoutUseCase } from './usecases/logout.usecase';
+import { RefreshTokenUseCase } from './usecases/refresh-token.usecase';
 import { SocialLoginUseCase } from './usecases/social-login.usecase';
+import { PgSessionStore, SESSION_STORE } from './repositories/session.store';
 
 type Config = ConfigService<EnvironmentVariables, true>;
 
@@ -25,7 +28,10 @@ type Config = ConfigService<EnvironmentVariables, true>;
   controllers: [AuthController],
   providers: [
     SocialLoginUseCase,
+    RefreshTokenUseCase,
+    LogoutUseCase,
     { provide: LOGIN_STORE, useClass: PgLoginStore },
+    { provide: SESSION_STORE, useClass: PgSessionStore },
     {
       provide: SOCIAL_TOKEN_VERIFIER,
       inject: [ConfigService],
