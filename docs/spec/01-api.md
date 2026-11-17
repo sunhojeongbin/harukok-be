@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b30299801ab97fe1ec4570db74
-> 원본 최종 수정: 2026-11-17 (소셜 로그인 보강 — 애플 name · 토큰 수명 · 카카오 OIDC · 약관 자동 동의)
+> 원본 최종 수정: 2026-11-17 (세션 — 재발급 판정 순서 · 슬라이딩 30일 · 로그아웃 deviceId)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🔌 API 설계서 (MVP v1)
@@ -123,15 +123,25 @@
 - 요청: `{ refreshToken, deviceId }`
 - 응답 200: `{ accessToken, refreshToken }`
 - 로테이션: 기존 토큰 `revoked_at` 기록 후 신규 발급. 재사용 감지 시 해당 기기 세션 폐기
+- 판정 순서 (토큰 행 `FOR UPDATE`, 한 트랜잭션)
+  1. 해시로 못 찾음(탈퇴로 지워진 경우 포함) → `REFRESH_TOKEN_INVALID`
+  2. 토큰의 기기 ≠ 요청 `deviceId` → `REFRESH_TOKEN_INVALID` (폐기하지 않음)
+  3. 이미 폐기된 토큰 = 재사용 → 그 기기의 활성 세션도 폐기하고 `REFRESH_TOKEN_REVOKED`
+  4. 만료 → `REFRESH_TOKEN_EXPIRED`
+- 새 리프레시 토큰의 만료는 발급 시점부터 다시 30일 (슬라이딩 — 앱을 계속 쓰면 로그인 유지)
+- ⚠️ 같은 토큰으로 재발급을 동시에 두 번 보내면 두 번째가 재사용으로 판정돼 세션이 폐기된다. 앱은 재발급 요청을 하나로 직렬화한다
 - 에러: `REFRESH_TOKEN_INVALID` · `REFRESH_TOKEN_REVOKED` · `REFRESH_TOKEN_EXPIRED` (모두 401)
 - 스플래시는 이 호출 하나로 자동 로그인을 판정한다. 성공 → 홈, 401 → 로그인 화면
 
 ### 3. POST `/auth/logout`
 
-- 요청: `{ refreshToken }` + `Authorization: Bearer`
+- 요청: `{ refreshToken, deviceId }` + `Authorization: Bearer` (6-1 — `deviceId` 3곳 모두 필수)
 - 응답 204
 - `refresh_tokens.revoked_at = now()` — **행 삭제 아님**
-- 멱등. 이미 폐기된 토큰도 204
+- 폐기 범위: 해당 기기의 활성 토큰 (DDL 운영 쿼리 [로그아웃])
+- 멱등. 이미 폐기된 토큰·만료된 토큰도 204
+- 토큰을 못 찾거나, 다른 사용자(Bearer `sub` 와 다름)의 토큰이거나, 토큰의 기기 ≠ `deviceId` 면 `REFRESH_TOKEN_INVALID`(401) — 남의 토큰 존재 여부를 구분해 알려주지 않는다
+- Bearer 가 없거나 무효·만료면 `ACCESS_TOKEN_INVALID`(401)
 
 ### 4. GET `/users/me`
 
