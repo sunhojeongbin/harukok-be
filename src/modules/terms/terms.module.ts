@@ -8,5 +8,7 @@ import { GetCurrentTermsUseCase } from './usecases/get-current-terms.usecase';
   imports: [TypeOrmModule.forFeature([Term])],
   controllers: [TermsController],
   providers: [GetCurrentTermsUseCase],
+  // 소셜 로그인이 신규 가입의 동의 대상(현행 이용약관)을 같은 판정으로 확인한다
+  exports: [GetCurrentTermsUseCase],
 })
 export class TermsModule {}

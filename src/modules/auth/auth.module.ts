@@ -1,0 +1,65 @@
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { EnvironmentVariables } from '../../common/config/env.validation';
+import { TokenCipher } from '../../common/crypto/token-cipher';
+import { TermsModule } from '../terms/terms.module';
+import { AuthController } from './controller/auth.controller';
+import { LOGIN_STORE, PgLoginStore } from './repositories/login.store';
+import {
+  APPLE_AUTH_CLIENT,
+  HttpAppleAuthClient,
+} from './social/apple-auth.client';
+import {
+  OidcSocialTokenVerifier,
+  remoteOidcConfigs,
+} from './social/oidc-token-verifier';
+import { SOCIAL_TOKEN_VERIFIER } from './social/social-identity';
+import { TokenIssuer } from './tokens/token-issuer';
+import { SocialLoginUseCase } from './usecases/social-login.usecase';
+
+type Config = ConfigService<EnvironmentVariables, true>;
+
+@Module({
+  imports: [TermsModule],
+  controllers: [AuthController],
+  providers: [
+    SocialLoginUseCase,
+    { provide: LOGIN_STORE, useClass: PgLoginStore },
+    {
+      provide: SOCIAL_TOKEN_VERIFIER,
+      inject: [ConfigService],
+      useFactory: (config: Config) =>
+        new OidcSocialTokenVerifier(
+          remoteOidcConfigs({
+            APPLE_CLIENT_ID: config.get('APPLE_CLIENT_ID', { infer: true }),
+            GOOGLE_CLIENT_IDS: config.get('GOOGLE_CLIENT_IDS', { infer: true }),
+            KAKAO_APP_KEYS: config.get('KAKAO_APP_KEYS', { infer: true }),
+          }),
+        ),
+    },
+    {
+      provide: APPLE_AUTH_CLIENT,
+      inject: [ConfigService],
+      useFactory: (config: Config) =>
+        new HttpAppleAuthClient({
+          teamId: config.get('APPLE_TEAM_ID', { infer: true }),
+          keyId: config.get('APPLE_KEY_ID', { infer: true }),
+          privateKeyPem: config.get('APPLE_PRIVATE_KEY', { infer: true }),
+          clientId: config.get('APPLE_CLIENT_ID', { infer: true }),
+        }),
+    },
+    {
+      provide: TokenCipher,
+      inject: [ConfigService],
+      useFactory: (config: Config) =>
+        new TokenCipher(config.get('TOKEN_ENCRYPTION_KEY', { infer: true })),
+    },
+    {
+      provide: TokenIssuer,
+      inject: [ConfigService],
+      useFactory: (config: Config) =>
+        new TokenIssuer(config.get('JWT_ACCESS_SECRET', { infer: true })),
+    },
+  ],
+})
+export class AuthModule {}
