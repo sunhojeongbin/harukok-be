@@ -74,6 +74,7 @@ describe('validateEnv', () => {
       'APPLE_CLIENT_ID',
       'GOOGLE_CLIENT_IDS',
       'KAKAO_APP_KEYS',
+      'KAKAO_ADMIN_KEY',
     ])('%s 가 없으면 키 이름을 담아 실패한다', (key) => {
       const env = withRest({ DATABASE_URL: VALID_URL });
       delete env[key];

@@ -7,8 +7,13 @@ import { AuthController } from './controller/auth.controller';
 import { LOGIN_STORE, PgLoginStore } from './repositories/login.store';
 import {
   APPLE_AUTH_CLIENT,
+  APPLE_REVOKE_CLIENT,
   HttpAppleAuthClient,
 } from './social/apple-auth.client';
+import {
+  HttpKakaoUnlinkClient,
+  KAKAO_UNLINK_CLIENT,
+} from './social/kakao-unlink.client';
 import {
   OidcSocialTokenVerifier,
   remoteOidcConfigs,
@@ -61,6 +66,16 @@ type Config = ConfigService<EnvironmentVariables, true>;
           clientId: config.get('APPLE_CLIENT_ID', { infer: true }),
         }),
     },
+    // 탈퇴(4단위)의 애플 revoke 는 같은 애플 클라이언트가 한다
+    { provide: APPLE_REVOKE_CLIENT, useExisting: APPLE_AUTH_CLIENT },
+    {
+      provide: KAKAO_UNLINK_CLIENT,
+      inject: [ConfigService],
+      useFactory: (config: Config) =>
+        new HttpKakaoUnlinkClient(
+          config.get('KAKAO_ADMIN_KEY', { infer: true }),
+        ),
+    },
     {
       provide: TokenCipher,
       inject: [ConfigService],
@@ -74,5 +89,7 @@ type Config = ConfigService<EnvironmentVariables, true>;
         new TokenIssuer(config.get('JWT_ACCESS_SECRET', { infer: true })),
     },
   ],
+  // UsersModule(탈퇴)이 연동 해제 · 토큰 복호화에 쓴다
+  exports: [APPLE_REVOKE_CLIENT, KAKAO_UNLINK_CLIENT, TokenCipher],
 })
 export class AuthModule {}

@@ -5,6 +5,7 @@ import { DatabaseModule } from './common/database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { TermsModule } from './modules/terms/terms.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TermsModule } from './modules/terms/terms.module';
     HealthModule,
     TermsModule,
     AuthModule,
+    UsersModule,
   ],
 })
 export class AppModule {}

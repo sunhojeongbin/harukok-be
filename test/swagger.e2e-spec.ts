@@ -114,6 +114,26 @@ describe('Swagger /docs (e2e)', () => {
       expect(logout?.security).toEqual([{ bearer: [] }]);
     });
 
+    it('GET·DELETE /users/me 는 users 태그, Bearer 필요, 401·404 를 담는다', () => {
+      const get = doc.paths['/users/me']?.get;
+      const del = doc.paths['/users/me']?.delete;
+
+      expect(get?.tags).toEqual(['users']);
+      expect(Object.keys(get?.responses ?? {}).sort()).toEqual([
+        '200',
+        '401',
+        '404',
+      ]);
+      expect(get?.security).toEqual([{ bearer: [] }]);
+      expect(del?.tags).toEqual(['users']);
+      expect(Object.keys(del?.responses ?? {}).sort()).toEqual([
+        '204',
+        '401',
+        '404',
+      ]);
+      expect(del?.security).toEqual([{ bearer: [] }]);
+    });
+
     it('Bearer 인증 스키마를 등록한다', () => {
       expect(doc.components.securitySchemes?.bearer?.scheme).toBe('bearer');
     });
