@@ -116,8 +116,6 @@ describe('POST /auth/social/login (e2e)', () => {
     });
   }
 
-  const agreement = () => ({ termId, version: '1.0' });
-
   const login = (body: Record<string, unknown>) =>
     request(app.getHttpServer()).post('/auth/social/login').send(body);
 
@@ -156,7 +154,6 @@ describe('POST /auth/social/login (e2e)', () => {
         provider: 'GOOGLE',
         idToken: 'g-1',
         deviceId: 'dev-1',
-        agreement: agreement(),
       });
 
       expect(body).toMatchObject({
@@ -191,7 +188,6 @@ describe('POST /auth/social/login (e2e)', () => {
         provider: 'GOOGLE',
         idToken: 'g-1',
         deviceId: 'dev-1',
-        agreement: agreement(),
       });
 
       const token = await db.query<{ token_hash: Buffer; days: string }>(
@@ -212,34 +208,37 @@ describe('POST /auth/social/login (e2e)', () => {
       expect(payload.sub).toBe(body.user.id);
     });
 
-    it('agreement 가 없으면 400 TERMS_AGREEMENT_REQUIRED, 아무것도 만들지 않는다', async () => {
+    it('요청에 약관 동의를 담지 않아도 현행 이용약관(구버전 아님)에 자동 동의로 기록한다', async () => {
       identity('g-1', 'GOOGLE', 'fake-google-sub-1');
 
-      const res = await login({
+      const body = await loginOk({
         provider: 'GOOGLE',
         idToken: 'g-1',
         deviceId: 'dev-1',
       });
 
-      expect(res.status).toBe(400);
-      expect(res.body).toMatchObject({ code: 'TERMS_AGREEMENT_REQUIRED' });
-      expect((await db.query('SELECT 1 FROM users')).rowCount).toBe(0);
+      const agreed = await db.query<{ version: string }>(
+        `SELECT t.version FROM user_term_agreements a JOIN terms t ON t.id = a.term_id
+          WHERE a.user_id = $1`,
+        [body.user.id],
+      );
+      expect(agreed.rows).toEqual([{ version: '1.0' }]);
     });
 
-    it('구버전 약관에 동의했으면 400 TERMS_AGREEMENT_REQUIRED', async () => {
+    it('시행 중인 이용약관이 없어도 가입을 막지 않는다 — 동의 기록 없이 200', async () => {
+      await db.query('DELETE FROM terms');
       identity('g-1', 'GOOGLE', 'fake-google-sub-1');
-      const old = await db.query<{ id: string }>(
-        `SELECT id FROM terms WHERE version = '0.9'`,
-      );
 
-      const res = await login({
+      const body = await loginOk({
         provider: 'GOOGLE',
         idToken: 'g-1',
         deviceId: 'dev-1',
-        agreement: { termId: old.rows[0].id, version: '0.9' },
       });
 
-      expect(res.body).toMatchObject({ code: 'TERMS_AGREEMENT_REQUIRED' });
+      expect(body.isNewUser).toBe(true);
+      expect(
+        (await db.query('SELECT 1 FROM user_term_agreements')).rowCount,
+      ).toBe(0);
     });
 
     it('이메일이 254자를 넘으면 NULL 로 저장한다 (가입은 진행)', async () => {
@@ -251,7 +250,6 @@ describe('POST /auth/social/login (e2e)', () => {
         provider: 'GOOGLE',
         idToken: 'g-1',
         deviceId: 'dev-1',
-        agreement: agreement(),
       });
 
       const user = await db.query<{ email: string | null }>(
@@ -267,7 +265,6 @@ describe('POST /auth/social/login (e2e)', () => {
         provider: 'GOOGLE',
         idToken: 'g-1',
         deviceId,
-        agreement: agreement(),
       });
 
       const [a, b] = await Promise.all([
@@ -293,7 +290,7 @@ describe('POST /auth/social/login (e2e)', () => {
         providerUserId: 'fake-race-sub',
         email: null,
         name: null,
-        agreedTermId: termId,
+        currentTermId: termId,
         appleRefreshTokenEnc: null,
         deviceId,
         refreshTokenHash: createHash('sha256').update(deviceId).digest(),
@@ -321,11 +318,10 @@ describe('POST /auth/social/login (e2e)', () => {
         provider: 'KAKAO',
         idToken: 'k-1',
         deviceId,
-        agreement: agreement(),
       });
     }
 
-    it('약관 동의 없이 로그인하고, 같은 사용자로 isNewUser=false', async () => {
+    it('같은 사용자로 로그인하고 isNewUser=false', async () => {
       const first = await signUp();
 
       const again = await loginOk({
@@ -339,6 +335,45 @@ describe('POST /auth/social/login (e2e)', () => {
         user: { id: first.user.id, name: '카카오 닉', providers: ['KAKAO'] },
       });
       expect((await db.query('SELECT 1 FROM users')).rowCount).toBe(1);
+    });
+
+    it('가입 때 약관이 없어 빠진 동의 기록은 다음 로그인 때 현행 약관으로 보충한다', async () => {
+      await db.query('DELETE FROM terms');
+      const first = await signUp('dev-1');
+      expect(
+        (await db.query('SELECT 1 FROM user_term_agreements')).rowCount,
+      ).toBe(0);
+      await db.query(
+        `INSERT INTO terms (version, title, content_url, effective_from)
+         VALUES ('2.0', '가짜 이용약관', 'https://example.com/terms/2.0', now() - interval '1 minute')`,
+      );
+
+      await loginOk({ provider: 'KAKAO', idToken: 'k-1', deviceId: 'dev-2' });
+      await loginOk({ provider: 'KAKAO', idToken: 'k-1', deviceId: 'dev-3' });
+
+      const agreed = await db.query<{ version: string }>(
+        `SELECT t.version FROM user_term_agreements a JOIN terms t ON t.id = a.term_id
+          WHERE a.user_id = $1`,
+        [first.user.id],
+      );
+      expect(agreed.rows).toEqual([{ version: '2.0' }]);
+    });
+
+    it('이미 동의 이력이 있으면 약관이 개정돼도 로그인으로 다시 기록하지 않는다 (재동의는 범위 밖)', async () => {
+      const first = await signUp('dev-1');
+      await db.query(
+        `INSERT INTO terms (version, title, content_url, effective_from)
+         VALUES ('1.1', '가짜 개정', 'https://example.com/terms/1.1', now() - interval '1 minute')`,
+      );
+
+      await loginOk({ provider: 'KAKAO', idToken: 'k-1', deviceId: 'dev-2' });
+
+      const agreed = await db.query<{ version: string }>(
+        `SELECT t.version FROM user_term_agreements a JOIN terms t ON t.id = a.term_id
+          WHERE a.user_id = $1`,
+        [first.user.id],
+      );
+      expect(agreed.rows).toEqual([{ version: '1.0' }]);
     });
 
     it('기존 사용자의 이름·이메일은 로그인으로 덮어쓰지 않는다', async () => {
@@ -401,7 +436,6 @@ describe('POST /auth/social/login (e2e)', () => {
         idToken: 'a-1',
         authorizationCode: 'fake-code',
         deviceId: 'dev-1',
-        agreement: agreement(),
         ...extra,
       });
 
@@ -437,13 +471,13 @@ describe('POST /auth/social/login (e2e)', () => {
       await appleLogin();
 
       apple.next = () => Promise.resolve('fake-apple-refresh-2');
-      await appleLogin({ agreement: undefined, deviceId: 'dev-2' });
+      await appleLogin({ deviceId: 'dev-2' });
       expect(cipher().decrypt((await storedAppleToken()) as Buffer)).toBe(
         'fake-apple-refresh-2',
       );
 
       apple.next = () => Promise.reject(new Error('fake invalid_grant'));
-      await appleLogin({ agreement: undefined, deviceId: 'dev-3' });
+      await appleLogin({ deviceId: 'dev-3' });
       expect(cipher().decrypt((await storedAppleToken()) as Buffer)).toBe(
         'fake-apple-refresh-2',
       );
@@ -456,7 +490,6 @@ describe('POST /auth/social/login (e2e)', () => {
         provider: 'GOOGLE',
         idToken: 'unknown-token',
         deviceId: 'dev-1',
-        agreement: agreement(),
       });
 
       expect(res.status).toBe(401);
@@ -470,8 +503,13 @@ describe('POST /auth/social/login (e2e)', () => {
       ['129자 deviceId', { deviceId: 'd'.repeat(129) }],
       ['애플인데 authorizationCode 누락', { provider: 'APPLE' }],
       [
-        'agreement.termId 가 UUID 아님',
-        { agreement: { termId: 'x', version: '1.0' } },
+        '더 이상 받지 않는 agreement 필드',
+        {
+          agreement: {
+            termId: '00000000-0000-7000-8000-000000000001',
+            version: '1.0',
+          },
+        },
       ],
       ['정의되지 않은 필드', { extra: 1 }],
     ])('%s → 400 VALIDATION_FAILED', async (_label, override) => {

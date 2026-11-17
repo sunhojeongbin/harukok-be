@@ -33,29 +33,19 @@ const RESULT: LoginResult = {
 function setup() {
   const verify = jest.fn().mockResolvedValue(IDENTITY);
   const exchangeCode = jest.fn().mockResolvedValue('fake-apple-refresh');
-  const findUserId = jest.fn().mockResolvedValue(null);
   const login = jest.fn().mockResolvedValue(RESULT);
   const currentTerm = jest.fn().mockResolvedValue(TERM);
   const cipher = new TokenCipher(randomBytes(32).toString('base64'));
   const useCase = new SocialLoginUseCase(
     { verify },
     { exchangeCode },
-    { findUserId, login },
+    { login },
     { execute: currentTerm } as unknown as GetCurrentTermsUseCase,
     cipher,
     new TokenIssuer(SECRET),
   );
   const command = () => (login.mock.calls[0] as [LoginCommand])[0];
-  return {
-    useCase,
-    verify,
-    exchangeCode,
-    findUserId,
-    login,
-    currentTerm,
-    cipher,
-    command,
-  };
+  return { useCase, verify, exchangeCode, login, currentTerm, cipher, command };
 }
 
 const request = (
@@ -64,17 +54,8 @@ const request = (
   provider: 'GOOGLE',
   idToken: 'fake-id-token',
   deviceId: 'fake-device-1',
-  agreement: { termId: TERM.id, version: TERM.version },
   ...overrides,
 });
-
-async function expectError(
-  promise: Promise<unknown>,
-  definition: (typeof AuthErrors)[keyof typeof AuthErrors],
-) {
-  await expect(promise).rejects.toBeInstanceOf(BusinessException);
-  await expect(promise).rejects.toMatchObject({ definition });
-}
 
 describe('SocialLoginUseCase', () => {
   let logError: jest.SpyInstance;
@@ -88,7 +69,7 @@ describe('SocialLoginUseCase', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('성공', () => {
-    it('신규: 동의한 현행 약관·정규화된 이메일·이름으로 가입하고 토큰을 발급한다', async () => {
+    it('정규화된 이메일·이름과 현행 이용약관으로 로그인 트랜잭션을 실행하고 토큰을 발급한다', async () => {
       const s = setup();
 
       const res = await s.useCase.execute(request());
@@ -99,7 +80,7 @@ describe('SocialLoginUseCase', () => {
         providerUserId: 'fake-sub-1',
         email: 'fake@example.com',
         name: '가짜 사용자',
-        agreedTermId: TERM.id,
+        currentTermId: TERM.id,
         appleRefreshTokenEnc: null,
         deviceId: 'fake-device-1',
       });
@@ -117,25 +98,13 @@ describe('SocialLoginUseCase', () => {
       );
     });
 
-    it('기존 사용자: 약관 동의 없이 로그인하고 약관을 조회하지 않는다', async () => {
+    it('기존 사용자 여부는 저장소 트랜잭션이 판정해 돌려준다 (isNewUser=false)', async () => {
       const s = setup();
-      s.findUserId.mockResolvedValue(RESULT.userId);
       s.login.mockResolvedValue({ ...RESULT, isNewUser: false });
 
-      const res = await s.useCase.execute(request({ agreement: undefined }));
+      const res = await s.useCase.execute(request());
 
       expect(res.isNewUser).toBe(false);
-      expect(s.command().agreedTermId).toBeNull();
-      expect(s.currentTerm).not.toHaveBeenCalled();
-    });
-
-    it('기존 사용자가 agreement 를 보내도 기록하지 않는다 (명세 5-2)', async () => {
-      const s = setup();
-      s.findUserId.mockResolvedValue(RESULT.userId);
-
-      await s.useCase.execute(request());
-
-      expect(s.command().agreedTermId).toBeNull();
     });
 
     it('카카오·구글은 요청의 name 을 무시하고 토큰의 이름을 쓴다', async () => {
@@ -202,67 +171,41 @@ describe('SocialLoginUseCase', () => {
     });
   });
 
-  describe('약관 동의 (NOT_FOUND 계열)', () => {
-    it('신규인데 agreement 가 없으면 TERMS_AGREEMENT_REQUIRED, 저장·애플 교환 안 함', async () => {
-      const s = setup();
-
-      await expectError(
-        s.useCase.execute(
-          request({
-            provider: 'APPLE',
-            authorizationCode: 'fake-code',
-            agreement: undefined,
-          }),
-        ),
-        AuthErrors.TERMS_AGREEMENT_REQUIRED,
-      );
-      expect(s.login).not.toHaveBeenCalled();
-      expect(s.exchangeCode).not.toHaveBeenCalled();
-    });
-
-    it.each([
-      [
-        'termId 가 현행이 아님',
-        { termId: '00000000-0000-7000-8000-0000000000ff', version: '1.0' },
-      ],
-      ['version 이 현행이 아님', { termId: TERM.id, version: '0.9' }],
-    ])('%s 이면 TERMS_AGREEMENT_REQUIRED', async (_label, agreement) => {
-      const s = setup();
-
-      await expectError(
-        s.useCase.execute(request({ agreement })),
-        AuthErrors.TERMS_AGREEMENT_REQUIRED,
-      );
-      expect(s.login).not.toHaveBeenCalled();
-    });
-
-    it('시행 중인 이용약관이 없으면(TERM_NOT_FOUND) 가입할 수 없다 → TERMS_AGREEMENT_REQUIRED', async () => {
+  describe('약관 자동 동의 (NOT_FOUND 계열)', () => {
+    it('시행 중인 이용약관이 없어도(TERM_NOT_FOUND) 가입을 막지 않는다 — 약관 없이 진행하고 에러 로그', async () => {
       const s = setup();
       s.currentTerm.mockRejectedValue(
         new BusinessException(TermsErrors.TERM_NOT_FOUND),
       );
 
-      await expectError(
-        s.useCase.execute(request()),
-        AuthErrors.TERMS_AGREEMENT_REQUIRED,
-      );
+      const res = await s.useCase.execute(request());
+
+      expect(res.accessToken).toBeTruthy();
+      expect(s.command().currentTermId).toBeNull();
+      expect(logError).toHaveBeenCalled();
+    });
+
+    it('약관 조회의 예상 못 한 오류는 그대로 전파한다 (DB 장애)', async () => {
+      const s = setup();
+      const error = new Error('fake db down');
+      s.currentTerm.mockRejectedValue(error);
+
+      await expect(s.useCase.execute(request())).rejects.toBe(error);
+      expect(s.login).not.toHaveBeenCalled();
     });
   });
 
   describe('권한 (토큰 검증)', () => {
-    it('idToken 검증 실패는 SOCIAL_TOKEN_INVALID 그대로, 조회·저장·교환 안 함', async () => {
+    it('idToken 검증 실패는 SOCIAL_TOKEN_INVALID 그대로, 저장·교환 안 함', async () => {
       const s = setup();
-      s.verify.mockRejectedValue(
-        new BusinessException(AuthErrors.SOCIAL_TOKEN_INVALID),
-      );
+      const error = new BusinessException(AuthErrors.SOCIAL_TOKEN_INVALID);
+      s.verify.mockRejectedValue(error);
 
-      await expectError(
+      await expect(
         s.useCase.execute(
           request({ provider: 'APPLE', authorizationCode: 'fake-code' }),
         ),
-        AuthErrors.SOCIAL_TOKEN_INVALID,
-      );
-      expect(s.findUserId).not.toHaveBeenCalled();
+      ).rejects.toBe(error);
       expect(s.login).not.toHaveBeenCalled();
       expect(s.exchangeCode).not.toHaveBeenCalled();
     });
@@ -273,14 +216,6 @@ describe('SocialLoginUseCase', () => {
       const s = setup();
       const error = new Error('fake db down');
       s.login.mockRejectedValue(error);
-
-      await expect(s.useCase.execute(request())).rejects.toBe(error);
-    });
-
-    it('약관 조회의 예상 못 한 오류도 그대로 전파한다', async () => {
-      const s = setup();
-      const error = new Error('fake db down');
-      s.currentTerm.mockRejectedValue(error);
 
       await expect(s.useCase.execute(request())).rejects.toBe(error);
     });

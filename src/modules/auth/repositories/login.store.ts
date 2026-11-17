@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
-import { BusinessException } from '../../../common/errors/business.exception';
-import { AuthErrors } from '../errors/auth.errors';
 import type { SocialProvider } from '../social/social-identity';
 import { REFRESH_TOKEN_TTL_DAYS } from '../tokens/token-issuer';
 
@@ -13,8 +11,11 @@ export interface LoginCommand {
   /** 정규화된 값. 신규 가입에만 저장한다 */
   email: string | null;
   name: string | null;
-  /** 신규 가입 시 동의한 현행 이용약관. 기존 사용자면 무시 */
-  agreedTermId: string | null;
+  /**
+   * 현행 이용약관. 신규 가입이면 자동 동의로 기록하고, 동의 이력이 없는 기존 사용자면 보충한다.
+   * NULL(시행 중인 약관 없음)이면 기록하지 않는다 — 가입은 막지 않는다
+   */
+  currentTermId: string | null;
   /** 애플 refresh token 암호문. NULL 이면 기존 값을 건드리지 않는다 */
   appleRefreshTokenEnc: Buffer | null;
   deviceId: string;
@@ -28,12 +29,8 @@ export interface LoginResult {
   providers: SocialProvider[];
 }
 
-/** 로그인 1건을 한 트랜잭션으로 처리한다 (가입 · 동의 기록 · DB 설계서 6장 기기 토큰). */
+/** 로그인 1건을 한 트랜잭션으로 처리한다 (신규 판정 · 가입 · 약관 자동 동의 · DB 설계서 6장 기기 토큰). */
 export interface LoginStore {
-  findUserId(
-    provider: SocialProvider,
-    providerUserId: string,
-  ): Promise<string | null>;
   login(command: LoginCommand): Promise<LoginResult>;
 }
 
@@ -54,13 +51,6 @@ function isSocialUniqueViolation(error: unknown): boolean {
 export class PgLoginStore implements LoginStore {
   constructor(private readonly dataSource: DataSource) {}
 
-  async findUserId(
-    provider: SocialProvider,
-    providerUserId: string,
-  ): Promise<string | null> {
-    return findSocialUser(this.dataSource.manager, provider, providerUserId);
-  }
-
   async login(command: LoginCommand): Promise<LoginResult> {
     try {
       return await this.runLogin(command);
@@ -79,6 +69,7 @@ export class PgLoginStore implements LoginStore {
         cmd.providerUserId,
       );
       const userId = existing ?? (await signUp(m, cmd));
+      if (cmd.currentTermId) await agreeIfMissing(m, userId, cmd.currentTermId);
       if (existing && cmd.appleRefreshTokenEnc) {
         await m.query(
           `UPDATE user_social_accounts SET provider_refresh_token_enc = $1
@@ -110,10 +101,6 @@ async function findSocialUser(
 }
 
 async function signUp(m: EntityManager, cmd: LoginCommand): Promise<string> {
-  // 유스케이스가 기존 사용자로 판정했는데 그 사이 탈퇴한 경우 — 동의 없이 가입시키지 않는다
-  if (!cmd.agreedTermId) {
-    throw new BusinessException(AuthErrors.TERMS_AGREEMENT_REQUIRED);
-  }
   const [user]: { id: string }[] = await m.query(
     'INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id',
     [cmd.name, cmd.email],
@@ -123,11 +110,26 @@ async function signUp(m: EntityManager, cmd: LoginCommand): Promise<string> {
      VALUES ($1, $2, $3, $4)`,
     [user.id, cmd.provider, cmd.providerUserId, cmd.appleRefreshTokenEnc],
   );
-  await m.query(
-    'INSERT INTO user_term_agreements (user_id, term_id) VALUES ($1, $2)',
-    [user.id, cmd.agreedTermId],
-  );
   return user.id;
+}
+
+/**
+ * 약관 자동 동의. 동의 이력이 하나도 없을 때만 현행 약관으로 기록한다
+ * — 신규 가입, 그리고 가입 때 약관이 없어 빠졌던 사용자의 다음 로그인(보충). 이미 이력이 있으면 개정돼도 다시 기록하지 않는다
+ */
+async function agreeIfMissing(
+  m: EntityManager,
+  userId: string,
+  termId: string,
+): Promise<void> {
+  await m.query(
+    `INSERT INTO user_term_agreements (user_id, term_id)
+     SELECT $1, $2
+      WHERE NOT EXISTS (SELECT 1 FROM user_term_agreements WHERE user_id = $1)
+     -- 같은 사용자가 동시에 로그인하면 둘 다 NOT EXISTS 를 통과한다 — 늦은 쪽은 조용히 건너뛴다
+     ON CONFLICT ON CONSTRAINT uq_user_term_agreements_user_id_term_id DO NOTHING`,
+    [userId, termId],
+  );
 }
 
 /** DB 설계서 6장 그대로 — 기기당 1개, 최대 3대 (초과 시 가장 오래된 기기 폐기) */

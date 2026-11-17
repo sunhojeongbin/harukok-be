@@ -3,12 +3,8 @@ import { TokenCipher } from '../../../common/crypto/token-cipher';
 import { BusinessException } from '../../../common/errors/business.exception';
 import { TermsErrors } from '../../terms/errors/terms.errors';
 import { GetCurrentTermsUseCase } from '../../terms/usecases/get-current-terms.usecase';
-import type {
-  AgreementDto,
-  SocialLoginRequestDto,
-} from '../dto/social-login.request.dto';
+import type { SocialLoginRequestDto } from '../dto/social-login.request.dto';
 import { SocialLoginResponseDto } from '../dto/social-login.response.dto';
-import { AuthErrors } from '../errors/auth.errors';
 import { LOGIN_STORE, type LoginStore } from '../repositories/login.store';
 import {
   APPLE_AUTH_CLIENT,
@@ -44,20 +40,14 @@ export class SocialLoginUseCase {
       request.provider,
       request.idToken,
     );
-    // 2. 신규면 현행 이용약관 동의 필수. 기존 사용자면 agreement 가 와도 기록하지 않는다 (5-2)
-    const existingUserId = await this.store.findUserId(
-      request.provider,
-      identity.providerUserId,
-    );
-    const agreedTermId = existingUserId
-      ? null
-      : await this.requireAgreement(request.agreement);
-    // 3. 애플만 — 동의 확인 뒤, DB 트랜잭션 전에 교환한다 (트랜잭션을 연 채 외부 호출을 기다리지 않는다)
+    // 2. 현행 이용약관 — 신규 가입이면 자동 동의, 이력이 없는 기존 사용자면 보충 (판정은 트랜잭션 안에서)
+    const currentTermId = await this.currentTermIdOrNull();
+    // 3. 애플만 — DB 트랜잭션 전에 교환한다 (트랜잭션을 연 채 외부 호출을 기다리지 않는다)
     const appleRefreshTokenEnc =
       request.provider === 'APPLE'
         ? await this.exchangeAppleCode(request.authorizationCode ?? '')
         : null;
-    // 4~6. 가입(이메일·이름 정규화) · 동의 기록 · 기기 토큰 — 한 트랜잭션
+    // 4~6. 신규 판정 · 가입(이메일·이름 정규화) · 약관 동의 기록 · 기기 토큰 — 한 트랜잭션
     const refresh = this.tokens.newRefreshToken();
     const result = await this.store.login({
       provider: request.provider,
@@ -67,7 +57,7 @@ export class SocialLoginUseCase {
       name: normalizeName(
         request.provider === 'APPLE' ? request.name : identity.name,
       ),
-      agreedTermId,
+      currentTermId,
       appleRefreshTokenEnc,
       deviceId: request.deviceId,
       refreshTokenHash: refresh.hash,
@@ -84,31 +74,22 @@ export class SocialLoginUseCase {
     };
   }
 
-  private async requireAgreement(
-    agreement: AgreementDto | undefined,
-  ): Promise<string> {
-    if (!agreement) {
-      throw new BusinessException(AuthErrors.TERMS_AGREEMENT_REQUIRED);
-    }
-    let term: { id: string; version: string };
+  /** 시행 중인 약관이 없어도 가입을 막지 않는다 — 기록 없이 진행하고, 다음 로그인 때 보충된다 */
+  private async currentTermIdOrNull(): Promise<string | null> {
     try {
-      term = await this.currentTerms.execute();
+      return (await this.currentTerms.execute()).id;
     } catch (error) {
       if (
         error instanceof BusinessException &&
         error.definition.code === TermsErrors.TERM_NOT_FOUND.code
       ) {
-        this.logger.warn(
-          '시행 중인 이용약관이 없어 신규 가입을 받을 수 없습니다.',
+        this.logger.error(
+          '시행 중인 이용약관이 없어 약관 동의를 기록하지 못했다 — 약관을 등록하면 다음 로그인 때 보충된다',
         );
-        throw new BusinessException(AuthErrors.TERMS_AGREEMENT_REQUIRED);
+        return null;
       }
       throw error;
     }
-    if (term.id !== agreement.termId || term.version !== agreement.version) {
-      throw new BusinessException(AuthErrors.TERMS_AGREEMENT_REQUIRED);
-    }
-    return term.id;
   }
 
   /** 실패해도 로그인은 진행한다 — 그 사용자는 탈퇴 시 수동 revoke 경로가 되므로 반드시 에러로 남긴다 */

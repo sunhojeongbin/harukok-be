@@ -21,12 +21,12 @@ export class AuthController {
   @ApiOperation({
     summary: '소셜 가입·로그인',
     description:
-      '카카오·애플·구글 통합. 신규 가입은 현행 이용약관 동의(agreement) 필수. 기기당 세션 1개, 최대 3대 (초과 시 가장 오래된 기기 자동 폐기). 인증 없음',
+      '카카오·애플·구글 통합. 신규 가입 시 현행 이용약관에 자동 동의로 기록. 기기당 세션 1개, 최대 3대 (초과 시 가장 오래된 기기 자동 폐기). 인증 없음',
   })
   @ApiOkResponse({ type: SocialLoginResponseDto })
   @ApiBadRequestResponse({
     type: ErrorBodyDto,
-    description: 'VALIDATION_FAILED · TERMS_AGREEMENT_REQUIRED',
+    description: 'VALIDATION_FAILED',
   })
   @ApiUnauthorizedResponse({
     type: ErrorBodyDto,

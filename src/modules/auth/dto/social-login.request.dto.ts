@@ -1,15 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import {
   IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   Matches,
   MaxLength,
   ValidateIf,
-  ValidateNested,
 } from 'class-validator';
 import { StripHtml } from '../../../common/text/strip-html';
 import {
@@ -17,18 +14,7 @@ import {
   type SocialProvider,
 } from '../social/social-identity';
 
-export class AgreementDto {
-  @ApiProperty({ format: 'uuid', description: 'GET /terms 의 id' })
-  @IsUUID()
-  termId: string;
-
-  @ApiProperty({ example: '1.0', description: 'GET /terms 의 version' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(20)
-  version: string;
-}
-
+/** 약관 동의 필드는 두지 않는다 — 신규 가입 시 서버가 현행 이용약관에 자동 동의로 기록한다 (API 설계서 5-2 변경) */
 export class SocialLoginRequestDto {
   @ApiProperty({ enum: SOCIAL_PROVIDERS })
   @IsIn(SOCIAL_PROVIDERS)
@@ -66,13 +52,4 @@ export class SocialLoginRequestDto {
   @Matches(/\S/, { message: 'deviceId must not be blank' })
   @MaxLength(128)
   deviceId: string;
-
-  @ApiPropertyOptional({
-    type: AgreementDto,
-    description: '신규 가입이면 필수 (현행 이용약관)',
-  })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => AgreementDto)
-  agreement?: AgreementDto;
 }
