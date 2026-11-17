@@ -1,5 +1,5 @@
 > 노션 원본: https://app.notion.com/p/417b98b30299801ab97fe1ec4570db74
-> 원본 최종 수정: 2026-11-13 (이용약관 단일화·006 반영)
+> 원본 최종 수정: 2026-11-17 (소셜 로그인 보강 — 애플 name · 토큰 수명 · 카카오 OIDC)
 > 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🔌 API 설계서 (MVP v1)
@@ -99,7 +99,9 @@
 
 ### 1. POST `/auth/social/login`
 
-- 요청: `{ provider: 'KAKAO'|'APPLE'|'GOOGLE', idToken, authorizationCode?, deviceId, agreement?: { termId, version } }`
+- 요청: `{ provider: 'KAKAO'|'APPLE'|'GOOGLE', idToken, authorizationCode?, name?, deviceId, agreement?: { termId, version } }`
+  - `idToken`은 카카오·구글은 OIDC `id_token`, 애플은 `identityToken`
+  - `name`은 **애플 최초 가입에서만** 보낸다 — 애플은 이름을 `identityToken`에 넣지 않고 최초 인가 때 SDK로만 준다. 카카오·구글은 `idToken`의 이름을 쓰고 이 필드는 무시한다
   - `agreement`는 **신규 가입이면 필수** (`GET /terms`로 받은 현행 이용약관)
   - `authorizationCode`는 **애플에서만 필수**. 구글·카카오는 보내지 않는다
 - 응답 200: `{ accessToken, refreshToken, isNewUser, user: { id, name, providers } }`
@@ -107,7 +109,7 @@
   1. `idToken` 검증 → 제공자 식별자(`provider_user_id`) 추출
   2. `user_social_accounts` 조회 → 없으면 신규. 신규인데 필수 약관 동의 누락이면 거부
   3. **애플만** — `authorizationCode`를 `/auth/token`으로 교환해 refresh token 확보 → 암호화 후 `user_social_accounts.provider_refresh_token_enc`에 저장 (5-6)
-  4. 소셜 응답의 이메일 `lower(btrim())`, 이름 HTML 제거 후 50자 절삭하여 저장
+  4. 소셜 응답의 이메일 `lower(btrim())`, 이름 HTML 제거 후 50자 절삭하여 저장 (애플 이름은 요청 `name`)
   5. 약관 동의 이력 기록 (`user_term_agreements`)
   6. 기기 토큰 트랜잭션 (DB 설계서 6장) → 3대 초과 시 가장 오래된 기기 자동 폐기
 - 에러: `SOCIAL_TOKEN_INVALID`(401) · `TERMS_AGREEMENT_REQUIRED`(400) · `VALIDATION_FAILED`(400)
@@ -348,6 +350,8 @@ target_id_type=user_id&target_id={provider_user_id}
 | 액세스 토큰 | `Authorization: Bearer <accessToken>` |
 | 리프레시 토큰 | 요청 본문 (헤더 아님) |
 | `deviceId` 필수 | 로그인 · 토큰 재발급 · 로그아웃 **3곳 모두** |
+| 액세스 토큰 수명 | **1시간** — JWT HS256, `sub` = 사용자ID |
+| 리프레시 토큰 수명 | **30일** — 무작위 값. DB 에는 SHA-256 해시만 저장 |
 
 `deviceId`가 3곳 모두 필요한 이유: 기기당 활성 토큰 1개가 부분 UNIQUE(`uq_refresh_tokens_user_id_device_id_active`)로 걸려 있어, 어느 기기의 세션인지 특정하지 못하면 폐기 대상을 고를 수 없다.
 
@@ -361,7 +365,7 @@ target_id_type=user_id&target_id={provider_user_id}
 | `authorizationCode` | `@IsString` · `provider`가 APPLE이면 필수 | 형식 강제 — StripHtml 제외 |
 | `deviceId` | `@IsString`  • 길이 상한 | 자유 텍스트 아님 — StripHtml 제외 |
 | `completed` | `@IsBoolean` | — |
-| `name` (소셜 응답) | HTML 제거 + 50자 절삭 | DB `ck_users_name` (1\~50자) |
+| `name` (소셜 응답 · 애플 요청) | `@StripHtml()` — HTML 제거 + 50자 절삭, 비면 NULL | DB `ck_users_name` (1\~50자) |
 | `email` (소셜 응답) | `lower(btrim())` | 안 하면 `ck_users_email`에서 INSERT 실패 |
 
 `title`과 `name`은 자유 텍스트이므로 `@StripHtml()`이 **필수**다. 레포 `CLAUDE.md` 보안 규칙과 DB 설계서 4장이 같은 지점을 지적한다. 이메일·UUID·날짜·숫자는 형식이 강제되므로 적용 제외.
@@ -429,6 +433,7 @@ target_id_type=user_id&target_id={provider_user_id}
 - [ ] 공통 응답 래퍼 · 에러 코드 네이밍을 기존 레포(`common/response`, `common/errors`)와 맞출지 결정
 - [ ] 전역 prefix 사용 여부 확정 — Swagger가 `/api`를 쓰고 있어 충돌 확인 필요
 - [ ] 구글 로그인 OAuth 클라이언트 ID 발급 (iOS / Android / 서버용 별도)
+- [ ] 카카오 OpenID Connect 활성화 — 로그인이 OIDC `id_token` 을 받는다 (검증용 앱 키는 `KAKAO_APP_KEYS`)
 - [ ] UseCase별 `.spec.ts` 작성 — 성공 / NOT\_FOUND / 권한 / 저장 실패 4케이스 (`CLAUDE.md` 테스트 규칙)
 - [ ] 조회·수정·완료변경 전 쿼리에 `AND deleted_at IS NULL` 적용 점검 — 누락 시 삭제된 할 일 노출 + Seq Scan
 - [ ] 자유 텍스트 필드 `@StripHtml()` 적용 점검 (`title`, `name`)
