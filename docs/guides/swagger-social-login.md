@@ -147,4 +147,4 @@ SELECT device_id, created_at, revoked_at
 - 애플 `authorizationCode` 교환과 refresh token 암호화 저장 (e2e 는 가짜 애플 클라이언트로 검증한다)
 - 실제 이름·이메일 클레임
 
-실제 키(`.env` 의 `APPLE_*` · `GOOGLE_CLIENT_IDS` · `KAKAO_APP_KEYS`)를 발급받은 뒤 앱이나 OAuth Playground 로 받은 토큰을 같은 방법으로 넣으면 된다.
+구글 · 카카오는 실제 키를 넣은 뒤 [real-social-login-test.md](real-social-login-test.md) 의 도구로 진짜 토큰을 받아 확인한다. 애플은 키 발급 후 앱에서 받은 토큰을 같은 방법으로 넣는다.
