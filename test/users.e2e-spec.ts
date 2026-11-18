@@ -292,6 +292,20 @@ describe('사용자 — 내 정보 · 탈퇴 (e2e)', () => {
       expect(refresh.body).toMatchObject({ code: 'REFRESH_TOKEN_INVALID' });
     });
 
+    // 보안 점검 #6: 액세스 토큰은 탈퇴 후에도 1시간 유효하다 — 할 일 등록이 FK 위반 500 이 아니라 404
+    it('탈퇴 후 남은 액세스 토큰으로 할 일을 등록하면 404 USER_NOT_FOUND', async () => {
+      const g = await login('GOOGLE', 'g-1||');
+      await withdraw(g.accessToken);
+
+      const res = await request(app.getHttpServer())
+        .post('/todos')
+        .set('Authorization', `Bearer ${g.accessToken}`)
+        .send({ title: '가짜', dueDate: '2026-11-18' });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ code: 'USER_NOT_FOUND' });
+    });
+
     it('Bearer 가 없으면 401, 아무것도 지우지 않는다', async () => {
       await login('GOOGLE', 'g-1||');
 

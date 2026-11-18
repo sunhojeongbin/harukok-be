@@ -130,6 +130,8 @@ SELECT device_id, created_at, revoked_at
 
 ## 5. 오류 응답 확인
 
+> 같은 IP 는 1분에 30번까지다 (`/health` 제외). 넘으면 429 `TOO_MANY_REQUESTS` — 1분 기다리거나 로컬 `.env` 의 `RATE_LIMIT_PER_MINUTE` 를 올린다
+
 | 보내는 것                                               | 응답                                                   |
 | ------------------------------------------------------- | ------------------------------------------------------ |
 | `"idToken": "아무거나"`                                 | 401 `SOCIAL_TOKEN_INVALID`                             |

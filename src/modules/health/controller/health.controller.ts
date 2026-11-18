@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   ApiOkResponse,
   ApiOperation,
@@ -13,6 +14,8 @@ import {
 } from '../usecases/check-health.usecase';
 
 @ApiTags('health')
+// 로드밸런서 헬스체크가 자주 부른다 — 요청 제한에서 뺀다
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(private readonly checkHealth: CheckHealthUseCase) {}

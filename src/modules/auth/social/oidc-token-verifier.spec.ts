@@ -109,6 +109,23 @@ describe('OidcSocialTokenVerifier', () => {
     });
   });
 
+  it.each([
+    ['문자열 "false"', 'false', null],
+    ['문자열 "true"', 'true', 'a@e.com'],
+  ])(
+    '애플: email_verified 가 %s 면 이메일은 %j (애플은 이 값을 문자열로도 준다)',
+    async (_label, verified, expected) => {
+      const token = await sign('APPLE', {
+        email: 'a@e.com',
+        email_verified: verified,
+      });
+
+      await expect(verifier.verify('APPLE', token)).resolves.toMatchObject({
+        email: expected,
+      });
+    },
+  );
+
   it('카카오: 이름은 nickname 클레임에서 꺼낸다', async () => {
     const token = await sign('KAKAO', { nickname: '가짜닉', email: 'k@e.com' });
 

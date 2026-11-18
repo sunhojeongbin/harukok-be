@@ -5,6 +5,8 @@ import {
   TODO_RESPONSE,
   USER,
 } from '../../../../test/fixtures/fake-todos-store';
+import { BusinessException } from '../../../common/errors/business.exception';
+import { UsersErrors } from '../../users/errors/users.errors';
 import { CreateTodoUseCase } from './create-todo.usecase';
 
 const DB_DOWN = new Error('fake db down');
@@ -29,6 +31,17 @@ describe('CreateTodoUseCase', () => {
     await expect(
       new CreateTodoUseCase(store).execute(USER, body),
     ).resolves.toMatchObject({ title: '다른 제목' });
+  });
+
+  // 보안 점검 #6: 탈퇴 후 남은 액세스 토큰(최대 1시간) — FK 위반 500 이 아니라 404
+  it('NOT_FOUND: 사용자가 없으면(탈퇴 후 남은 토큰) USER_NOT_FOUND', async () => {
+    const store = fakeStore({ create: jest.fn().mockResolvedValue(null) });
+    const result = new CreateTodoUseCase(store).execute(USER, body);
+
+    await expect(result).rejects.toBeInstanceOf(BusinessException);
+    await expect(result).rejects.toMatchObject({
+      definition: UsersErrors.USER_NOT_FOUND,
+    });
   });
 
   it('권한: Bearer 사용자의 할 일로 만든다', async () => {

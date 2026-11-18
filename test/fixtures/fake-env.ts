@@ -20,6 +20,7 @@ export function fakeAppleKeyPair(): {
 /** DATABASE_URL 을 뺀 필수 환경변수의 가짜 값. 실제 시크릿이 아니다. */
 export function fakeEnv(): Record<string, string> {
   return {
+    NODE_ENV: 'test',
     JWT_ACCESS_SECRET: 'fake-access-secret-for-tests-only-0123456789',
     TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
     APPLE_TEAM_ID: 'FAKETEAM01',

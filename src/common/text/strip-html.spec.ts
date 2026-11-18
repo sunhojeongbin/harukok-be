@@ -12,6 +12,25 @@ describe('stripHtml', () => {
   ])('%j → %j', (input, expected) => {
     expect(stripHtml(input)).toBe(expected);
   });
+
+  describe('우회 시도 — 결과에 태그가 다시 생기면 안 된다', () => {
+    it.each([
+      ['겹친 태그', '<<script>script>alert(1)<</script>/script>'],
+      ['겹친 img', '<<b>img src=x onerror=alert(1)>'],
+      ['닫히지 않은 태그', '<img src=x onerror=alert(1)//'],
+      ['쪼갠 태그', '<scr<b>ipt>alert(1)</scr</b>ipt>'],
+      ['닫는 태그만', 'x</script'],
+      ['주석', '<!-- x --><script>1</script>'],
+    ])('%s', (_label, input) => {
+      const out = stripHtml(input);
+
+      expect(out).not.toMatch(/<[a-zA-Z/!]/);
+    });
+
+    it('부등호로 쓴 < 는 남긴다 (뒤에 글자가 오지 않으면 태그가 아니다)', () => {
+      expect(stripHtml('1 < 2 그리고 3 <= 4')).toBe('1 < 2 그리고 3 <= 4');
+    });
+  });
 });
 
 class FakeDto {

@@ -7,7 +7,6 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
   Matches,
   Max,
@@ -20,6 +19,15 @@ import {
 } from 'class-validator';
 
 const NODE_ENVS = ['development', 'test', 'production'] as const;
+export type NodeEnv = (typeof NODE_ENVS)[number];
+
+/**
+ * 개발 전용 기능(Swagger · 테스트 로그인)은 이 값일 때만 켠다 — '운영이면 끈다' 가 아니라 허용 목록 (보안 점검 #2).
+ * NODE_ENV 가 빠지거나 낯선 값이면 꺼진다.
+ */
+export function isDevelopmentLike(nodeEnv: string | undefined): boolean {
+  return nodeEnv === 'development' || nodeEnv === 'test';
+}
 
 @ValidatorConstraint({ name: 'decodesTo32Bytes' })
 class DecodesTo32Bytes implements ValidatorConstraintInterface {
@@ -42,9 +50,9 @@ function commaList(value: unknown): unknown {
 
 // 단위가 늘면 실제로 쓰는 키만 여기에 추가한다.
 export class EnvironmentVariables {
-  @IsOptional()
+  /** 필수 — 빠지면 개발 전용 기능이 어떻게 판정될지 모호해진다 */
   @IsIn(NODE_ENVS)
-  NODE_ENV?: (typeof NODE_ENVS)[number];
+  NODE_ENV: NodeEnv;
 
   @Matches(/^postgres(ql)?:\/\/\S+$/)
   DATABASE_URL: string;
@@ -105,6 +113,22 @@ export class EnvironmentVariables {
   )
   @IsBoolean()
   DEV_TEST_LOGIN: boolean = false;
+
+  /** 같은 IP 의 1분당 요청 수 상한 (/health 제외). 카운터는 인스턴스마다 따로 센다 */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  RATE_LIMIT_PER_MINUTE: number = 30;
+
+  /**
+   * 앞단 프록시 · 로드밸런서 단수. 0 이면 X-Forwarded-For 를 믿지 않는다(위조로 제한 회피 불가).
+   * 프록시 뒤에서 0 이면 모든 사용자가 프록시 IP 하나로 묶여 함께 제한된다 — 배포 구성에 맞춰야 한다
+   */
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  TRUST_PROXY: number = 0;
 }
 
 /** 부팅 시 환경변수 검증. 오류에는 키 이름만 담고 값은 넣지 않는다 (시크릿 노출 방지). */
@@ -117,9 +141,9 @@ export function validateEnv(
     const keys = errors.map((e) => e.property).join(', ');
     throw new Error(`환경변수가 없거나 올바르지 않습니다: ${keys}`);
   }
-  if (env.NODE_ENV === 'production' && env.DEV_TEST_LOGIN) {
+  if (env.DEV_TEST_LOGIN && !isDevelopmentLike(env.NODE_ENV)) {
     throw new Error(
-      '환경변수가 올바르지 않습니다: DEV_TEST_LOGIN 은 운영(NODE_ENV=production)에서 켤 수 없습니다.',
+      '환경변수가 올바르지 않습니다: DEV_TEST_LOGIN 은 NODE_ENV=development · test 에서만 켤 수 있습니다.',
     );
   }
   return env;

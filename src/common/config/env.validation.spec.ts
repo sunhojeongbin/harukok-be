@@ -45,6 +45,14 @@ describe('validateEnv', () => {
     ).toThrow(/PORT/);
   });
 
+  // 보안 점검 #2: 값이 빠지면 Swagger · 테스트 로그인이 운영에서 열릴 수 있다 — 부팅 단계에서 막는다
+  it('NODE_ENV 가 없으면 키 이름을 담아 실패한다', () => {
+    const env = withRest({ DATABASE_URL: VALID_URL });
+    delete env.NODE_ENV;
+
+    expect(() => validateEnv(env)).toThrow(/NODE_ENV/);
+  });
+
   it('NODE_ENV 가 허용값이 아니면 실패한다', () => {
     expect(() =>
       validateEnv(withRest({ DATABASE_URL: VALID_URL, NODE_ENV: 'staging' })),
@@ -131,6 +139,39 @@ describe('validateEnv', () => {
 
       expect(env.GOOGLE_CLIENT_IDS).toEqual(['a.apps', 'b.apps']);
       expect(env.KAKAO_APP_KEYS).toEqual(['k1']);
+    });
+  });
+
+  describe('요청 제한 · 프록시 (보안 점검 #4)', () => {
+    it('기본값: 1분에 30번, 프록시 신뢰 안 함(0)', () => {
+      const env = validateEnv(withRest({ DATABASE_URL: VALID_URL }));
+
+      expect(env.RATE_LIMIT_PER_MINUTE).toBe(30);
+      expect(env.TRUST_PROXY).toBe(0);
+    });
+
+    it('문자열을 숫자로 바꾼다', () => {
+      const env = validateEnv(
+        withRest({
+          DATABASE_URL: VALID_URL,
+          RATE_LIMIT_PER_MINUTE: '120',
+          TRUST_PROXY: '2',
+        }),
+      );
+
+      expect(env.RATE_LIMIT_PER_MINUTE).toBe(120);
+      expect(env.TRUST_PROXY).toBe(2);
+    });
+
+    it.each([
+      ['RATE_LIMIT_PER_MINUTE', '0'],
+      ['RATE_LIMIT_PER_MINUTE', 'abc'],
+      ['TRUST_PROXY', '-1'],
+      ['TRUST_PROXY', 'true'],
+    ])('%s=%s 이면 실패한다', (key, value) => {
+      expect(() =>
+        validateEnv(withRest({ DATABASE_URL: VALID_URL, [key]: value })),
+      ).toThrow(new RegExp(key));
     });
   });
 
