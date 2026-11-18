@@ -113,22 +113,6 @@ export class EnvironmentVariables {
   )
   @IsBoolean()
   DEV_TEST_LOGIN: boolean = false;
-
-  /** 같은 IP 의 1분당 요청 수 상한 (/health 제외). 카운터는 인스턴스마다 따로 센다 */
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  RATE_LIMIT_PER_MINUTE: number = 30;
-
-  /**
-   * 앞단 프록시 · 로드밸런서 단수. 0 이면 X-Forwarded-For 를 믿지 않는다(위조로 제한 회피 불가).
-   * 프록시 뒤에서 0 이면 모든 사용자가 프록시 IP 하나로 묶여 함께 제한된다 — 배포 구성에 맞춰야 한다
-   */
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(10)
-  TRUST_PROXY: number = 0;
 }
 
 /** 부팅 시 환경변수 검증. 오류에는 키 이름만 담고 값은 넣지 않는다 (시크릿 노출 방지). */

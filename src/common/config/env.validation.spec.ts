@@ -142,39 +142,6 @@ describe('validateEnv', () => {
     });
   });
 
-  describe('요청 제한 · 프록시 (보안 점검 #4)', () => {
-    it('기본값: 1분에 30번, 프록시 신뢰 안 함(0)', () => {
-      const env = validateEnv(withRest({ DATABASE_URL: VALID_URL }));
-
-      expect(env.RATE_LIMIT_PER_MINUTE).toBe(30);
-      expect(env.TRUST_PROXY).toBe(0);
-    });
-
-    it('문자열을 숫자로 바꾼다', () => {
-      const env = validateEnv(
-        withRest({
-          DATABASE_URL: VALID_URL,
-          RATE_LIMIT_PER_MINUTE: '120',
-          TRUST_PROXY: '2',
-        }),
-      );
-
-      expect(env.RATE_LIMIT_PER_MINUTE).toBe(120);
-      expect(env.TRUST_PROXY).toBe(2);
-    });
-
-    it.each([
-      ['RATE_LIMIT_PER_MINUTE', '0'],
-      ['RATE_LIMIT_PER_MINUTE', 'abc'],
-      ['TRUST_PROXY', '-1'],
-      ['TRUST_PROXY', 'true'],
-    ])('%s=%s 이면 실패한다', (key, value) => {
-      expect(() =>
-        validateEnv(withRest({ DATABASE_URL: VALID_URL, [key]: value })),
-      ).toThrow(new RegExp(key));
-    });
-  });
-
   describe('DEV_TEST_LOGIN (개발 전용 테스트 로그인)', () => {
     it('없으면 꺼짐(false)', () => {
       expect(
