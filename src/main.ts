@@ -1,22 +1,38 @@
-import { existsSync } from 'node:fs';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
 import { configureApp } from './app.setup';
 import type { EnvironmentVariables } from './common/config/env.validation';
 import { isSwaggerEnabled, setupSwagger } from './common/swagger/setup-swagger';
 
-async function bootstrap() {
-  // 로컬 개발용. 이미 설정된 환경변수(운영·CI)는 덮어쓰지 않는다.
-  if (existsSync('.env')) process.loadEnvFile('.env');
+/**
+ * @description 백엔드 서버 부트스트랩
+ * @returns {Promise<void>}
+ */
+async function bootstrap(): Promise<void> {
+  // NestFactory.create() 에서 에러 발생 시, NestJS 내부에서 process.exit(1) 호출하므로, 여기서도 동일하게 처리
+  const app = await NestFactory.create(AppModule, {
+    abortOnError: false,
+  });
 
-  // AppModule 은 import 시점에 환경변수를 검증하므로 .env 를 읽은 뒤 불러온다.
-  const { AppModule } = await import('./app.module.js');
-  const app = await NestFactory.create(AppModule);
-  configureApp(app);
   const config = app.get(ConfigService<EnvironmentVariables, true>);
-  if (isSwaggerEnabled(config.get('NODE_ENV', { infer: true }))) {
+  configureApp(app);
+
+  const nodeEnv = config.get('NODE_ENV', { infer: true });
+  const port = config.get('PORT', { infer: true });
+
+  if (isSwaggerEnabled(nodeEnv)) {
     setupSwagger(app);
   }
-  await app.listen(config.get('PORT', { infer: true }));
+
+  await app.listen(port);
+
+  Logger.log(`Application started on port ${port} (${nodeEnv})`, 'Bootstrap');
 }
-void bootstrap();
+
+void bootstrap().catch(() => {
+  // NestFactory.create() 에서 에러 발생 시, NestJS 내부에서 process.exit(1) 호출하므로, 여기서도 동일하게 처리
+  Logger.error('Application bootstrap failed', 'Bootstrap');
+  process.exit(1);
+});

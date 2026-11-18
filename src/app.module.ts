@@ -11,7 +11,7 @@ import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
-    // .env 는 main.ts 가 읽는다. 모듈은 process.env 만 보므로 테스트가 .env 에 영향받지 않는다.
+    // .env 는 nest start --env-file 이 읽는다. 모듈은 process.env 만 보므로 테스트가 .env 에 영향받지 않는다.
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: true,

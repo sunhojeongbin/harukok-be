@@ -7,7 +7,6 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
   Matches,
   Max,
@@ -20,6 +19,15 @@ import {
 } from 'class-validator';
 
 const NODE_ENVS = ['development', 'test', 'production'] as const;
+export type NodeEnv = (typeof NODE_ENVS)[number];
+
+/**
+ * 개발 전용 기능(Swagger · 테스트 로그인)은 이 값일 때만 켠다 — '운영이면 끈다' 가 아니라 허용 목록 (보안 점검 #2).
+ * NODE_ENV 가 빠지거나 낯선 값이면 꺼진다.
+ */
+export function isDevelopmentLike(nodeEnv: string | undefined): boolean {
+  return nodeEnv === 'development' || nodeEnv === 'test';
+}
 
 @ValidatorConstraint({ name: 'decodesTo32Bytes' })
 class DecodesTo32Bytes implements ValidatorConstraintInterface {
@@ -42,9 +50,9 @@ function commaList(value: unknown): unknown {
 
 // 단위가 늘면 실제로 쓰는 키만 여기에 추가한다.
 export class EnvironmentVariables {
-  @IsOptional()
+  /** 필수 — 빠지면 개발 전용 기능이 어떻게 판정될지 모호해진다 */
   @IsIn(NODE_ENVS)
-  NODE_ENV?: (typeof NODE_ENVS)[number];
+  NODE_ENV: NodeEnv;
 
   @Matches(/^postgres(ql)?:\/\/\S+$/)
   DATABASE_URL: string;
@@ -117,9 +125,9 @@ export function validateEnv(
     const keys = errors.map((e) => e.property).join(', ');
     throw new Error(`환경변수가 없거나 올바르지 않습니다: ${keys}`);
   }
-  if (env.NODE_ENV === 'production' && env.DEV_TEST_LOGIN) {
+  if (env.DEV_TEST_LOGIN && !isDevelopmentLike(env.NODE_ENV)) {
     throw new Error(
-      '환경변수가 올바르지 않습니다: DEV_TEST_LOGIN 은 운영(NODE_ENV=production)에서 켤 수 없습니다.',
+      '환경변수가 올바르지 않습니다: DEV_TEST_LOGIN 은 NODE_ENV=development · test 에서만 켤 수 있습니다.',
     );
   }
   return env;

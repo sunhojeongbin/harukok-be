@@ -18,6 +18,7 @@ export class TokenCipher {
     }
   }
 
+  // 암호화된 토큰을 생성합니다. (DB에 저장)
   encrypt(plain: string): Buffer {
     const iv = randomBytes(IV_BYTES);
     const cipher = createCipheriv(ALGORITHM, this.key, iv);
@@ -25,6 +26,7 @@ export class TokenCipher {
     return Buffer.concat([iv, cipher.getAuthTag(), body]);
   }
 
+  // 암호화된 토큰을 복호화합니다. (DB에서 읽음)
   decrypt(sealed: Buffer): string {
     const iv = sealed.subarray(0, IV_BYTES);
     const tag = sealed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);

@@ -74,9 +74,10 @@ export class OidcSocialTokenVerifier implements SocialTokenVerifier {
     if (typeof payload.sub !== 'string' || payload.sub === '') {
       throw new BusinessException(AuthErrors.SOCIAL_TOKEN_INVALID);
     }
-    // 구글은 미확인 이메일에 email_verified=false 를 준다. 확인되지 않은 이메일은 저장하지 않는다
-    const email =
-      payload.email_verified === false ? null : stringClaim(payload, 'email');
+    // 확인되지 않은 이메일은 저장하지 않는다. 구글은 boolean, 애플은 문자열("false")로도 준다 (보안 점검 #7)
+    const unverified =
+      payload.email_verified === false || payload.email_verified === 'false';
+    const email = unverified ? null : stringClaim(payload, 'email');
     return {
       providerUserId: payload.sub,
       email,

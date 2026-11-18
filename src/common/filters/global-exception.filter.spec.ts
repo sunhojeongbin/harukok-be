@@ -85,6 +85,38 @@ describe('GlobalExceptionFilter', () => {
     );
   });
 
+  it('Express 단의 클라이언트 오류(본문 크기 초과 413)는 그 상태로 응답하고 error 로그를 남기지 않는다', () => {
+    const { host, res } = mockHost();
+    // body-parser 가 던지는 http-errors 형태 (Nest HttpException 이 아니다)
+    const tooLarge = Object.assign(new Error('request entity too large'), {
+      status: 413,
+      statusCode: 413,
+      expose: true,
+      type: 'entity.too.large',
+    });
+
+    filter.catch(tooLarge, host);
+
+    expect(res.status).toHaveBeenCalledWith(413);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'PAYLOAD_TOO_LARGE' }),
+    );
+    expect(logError).not.toHaveBeenCalled();
+  });
+
+  it('expose 가 아닌 오류(서버 쪽)는 status 가 있어도 500 으로 숨긴다', () => {
+    const { host, res } = mockHost();
+    const internal = Object.assign(new Error('fake internal'), {
+      status: 503,
+      expose: false,
+    });
+
+    filter.catch(internal, host);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(logError).toHaveBeenCalled();
+  });
+
   it('예상 못 한 예외는 500 INTERNAL_ERROR 로 응답하고 원래 메시지를 노출하지 않는다', () => {
     const { host, res } = mockHost();
 

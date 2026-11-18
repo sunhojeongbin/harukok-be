@@ -45,6 +45,14 @@ describe('validateEnv', () => {
     ).toThrow(/PORT/);
   });
 
+  // 보안 점검 #2: 값이 빠지면 Swagger · 테스트 로그인이 운영에서 열릴 수 있다 — 부팅 단계에서 막는다
+  it('NODE_ENV 가 없으면 키 이름을 담아 실패한다', () => {
+    const env = withRest({ DATABASE_URL: VALID_URL });
+    delete env.NODE_ENV;
+
+    expect(() => validateEnv(env)).toThrow(/NODE_ENV/);
+  });
+
   it('NODE_ENV 가 허용값이 아니면 실패한다', () => {
     expect(() =>
       validateEnv(withRest({ DATABASE_URL: VALID_URL, NODE_ENV: 'staging' })),

@@ -42,7 +42,12 @@ const toRecord = (r: TodoRow): TodoRecord => ({
 /** 모든 조회 · 수정 · 완료 변경은 user_id 와 deleted_at IS NULL 을 조건에 넣는다 (CLAUDE.md 4장) */
 export interface TodosStore {
   list(userId: string, dueDate: string): Promise<TodoRecord[]>;
-  create(userId: string, title: string, dueDate: string): Promise<TodoRecord>;
+  /** 사용자가 없으면(탈퇴 후 남은 액세스 토큰) NULL */
+  create(
+    userId: string,
+    title: string,
+    dueDate: string,
+  ): Promise<TodoRecord | null>;
   update(
     userId: string,
     todoId: string,
@@ -74,13 +79,19 @@ export class PgTodosStore implements TodosStore {
     userId: string,
     title: string,
     dueDate: string,
-  ): Promise<TodoRecord> {
-    const [row]: TodoRow[] = await this.dataSource.query(
-      `INSERT INTO todos (user_id, title, due_date) VALUES ($1, $2, $3)
-       RETURNING ${COLUMNS}`,
-      [userId, title, dueDate],
-    );
-    return toRecord(row);
+  ): Promise<TodoRecord | null> {
+    try {
+      const [row]: TodoRow[] = await this.dataSource.query(
+        `INSERT INTO todos (user_id, title, due_date) VALUES ($1, $2, $3)
+         RETURNING ${COLUMNS}`,
+        [userId, title, dueDate],
+      );
+      return toRecord(row);
+    } catch (error) {
+      // 액세스 토큰은 탈퇴 후에도 1시간 유효하다 — 사용자 FK 위반은 500 이 아니라 '사용자 없음' (보안 점검 #6)
+      if (isUserForeignKeyViolation(error)) return null;
+      throw error;
+    }
   }
 
   // UPDATE … RETURNING 은 TypeORM 이 [행, 개수] 로 돌려주므로 CTE 로 감싸 SELECT 행으로 받는다
@@ -157,4 +168,14 @@ export class PgTodosStore implements TodosStore {
     );
     return row ? toRecord(row) : null;
   }
+}
+
+function isUserForeignKeyViolation(error: unknown): boolean {
+  const e = error as {
+    driverError?: { code?: string; constraint?: string };
+    code?: string;
+    constraint?: string;
+  };
+  const pg = e.driverError ?? e;
+  return pg.code === '23503' && pg.constraint === 'todos_user_id_fkey';
 }

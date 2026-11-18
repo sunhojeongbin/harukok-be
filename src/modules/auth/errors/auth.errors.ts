@@ -1,6 +1,10 @@
 import { HttpStatus } from '@nestjs/common';
 import type { ErrorDefinition } from '../../../common/errors/business.exception';
 
+/**
+ * @description 인증 모듈 오류 정의
+ * @returns {Record<string, ErrorDefinition>}
+ */
 export const AuthErrors = {
   SOCIAL_TOKEN_INVALID: {
     code: 'SOCIAL_TOKEN_INVALID',
