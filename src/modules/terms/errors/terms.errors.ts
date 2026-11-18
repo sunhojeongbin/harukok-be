@@ -1,6 +1,10 @@
 import { HttpStatus } from '@nestjs/common';
 import type { ErrorDefinition } from '../../../common/errors/business.exception';
 
+/**
+ * @description 이용약관 모듈 오류 정의
+ * @returns {Record<string, ErrorDefinition>}
+ */
 export const TermsErrors = {
   TERM_NOT_FOUND: {
     code: 'TERM_NOT_FOUND',

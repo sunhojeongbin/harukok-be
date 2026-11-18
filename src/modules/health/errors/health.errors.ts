@@ -1,6 +1,10 @@
 import { HttpStatus } from '@nestjs/common';
 import type { ErrorDefinition } from '../../../common/errors/business.exception';
 
+/**
+ * @description 헬스 체크 모듈 오류 정의
+ * @returns {Record<string, ErrorDefinition>}
+ */
 export const HealthErrors = {
   DB_UNAVAILABLE: {
     code: 'DB_UNAVAILABLE',

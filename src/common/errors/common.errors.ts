@@ -1,6 +1,10 @@
 import { HttpStatus } from '@nestjs/common';
 import type { ErrorDefinition } from './business.exception';
 
+/**
+ * @description 공통 오류 정의
+ * @returns {Record<string, ErrorDefinition>}
+ */
 export const CommonErrors = {
   VALIDATION_FAILED: {
     code: 'VALIDATION_FAILED',
