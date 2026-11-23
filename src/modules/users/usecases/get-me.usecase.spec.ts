@@ -7,7 +7,7 @@ const PROFILE: UserProfile = {
   id: '00000000-0000-7000-8000-000000000001',
   name: '가짜 사용자',
   email: null,
-  providers: ['KAKAO', 'APPLE'],
+  provider: 'KAKAO',
   createdAt: new Date('2026-11-17T01:02:03.000Z'),
 };
 
@@ -21,14 +21,14 @@ function setup(findProfile: jest.Mock) {
 }
 
 describe('GetMeUseCase', () => {
-  it('성공: 프로필을 { id, name, email, providers, createdAt(ISO) } 로 돌려준다', async () => {
+  it('성공: 프로필을 { id, name, email, provider, createdAt(ISO) } 로 돌려준다', async () => {
     const useCase = setup(jest.fn().mockResolvedValue(PROFILE));
 
     await expect(useCase.execute(PROFILE.id)).resolves.toEqual({
       id: PROFILE.id,
       name: '가짜 사용자',
       email: null,
-      providers: ['KAKAO', 'APPLE'],
+      provider: 'KAKAO',
       createdAt: '2026-11-17T01:02:03.000Z',
     });
   });

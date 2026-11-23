@@ -148,7 +148,7 @@ describe('사용자 — 내 정보 · 탈퇴 (e2e)', () => {
     ).rows[0].n;
 
   describe('GET /users/me', () => {
-    it('{ id, name, email, providers, createdAt } 를 돌려준다', async () => {
+    it('{ id, name, email, provider(단일 값), createdAt } 를 돌려준다', async () => {
       const a = await login('GOOGLE', 'g-1|Fake@Example.com|가짜 사용자');
 
       const res = await me(a.accessToken);
@@ -158,7 +158,7 @@ describe('사용자 — 내 정보 · 탈퇴 (e2e)', () => {
         id: a.user.id,
         name: '가짜 사용자',
         email: 'fake@example.com',
-        providers: ['GOOGLE'],
+        provider: 'GOOGLE',
         createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.*Z$/) as unknown,
       });
     });
@@ -169,7 +169,7 @@ describe('사용자 — 내 정보 · 탈퇴 (e2e)', () => {
       expect((await me(a.accessToken)).body).toMatchObject({
         name: null,
         email: null,
-        providers: ['KAKAO'],
+        provider: 'KAKAO',
       });
     });
 

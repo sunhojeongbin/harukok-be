@@ -24,10 +24,10 @@ export class UserMeResponseDto {
 
   @ApiProperty({
     enum: SOCIAL_PROVIDERS,
-    isArray: true,
-    description: '설정 화면 "로그인 제공자 표시"',
+    description:
+      '설정 화면 "로그인 제공자 표시". 계정 연동이 없어 사용자당 하나',
   })
-  providers: SocialProvider[];
+  provider: SocialProvider;
 
   @ApiProperty({ type: String, format: 'date-time' })
   createdAt: string;

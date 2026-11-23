@@ -123,7 +123,7 @@ describe('POST /auth/social/login (e2e)', () => {
     accessToken: string;
     refreshToken: string;
     isNewUser: boolean;
-    user: { id: string; name: string | null; providers: string[] };
+    user: { id: string; name: string | null; provider: string };
   };
 
   async function loginOk(body: Record<string, unknown>): Promise<LoginBody> {
@@ -158,8 +158,10 @@ describe('POST /auth/social/login (e2e)', () => {
 
       expect(body).toMatchObject({
         isNewUser: true,
-        user: { name: '가짜 사용자', providers: ['GOOGLE'] },
+        user: { name: '가짜 사용자', provider: 'GOOGLE' },
       });
+      // 계정 연동이 없어 제공자는 하나 — 예전 배열 필드(providers)는 내려주지 않는다
+      expect(body.user).not.toHaveProperty('providers');
       const user = await db.query<{ email: string; name: string }>(
         'SELECT email, name FROM users WHERE id = $1',
         [body.user.id],
@@ -332,7 +334,7 @@ describe('POST /auth/social/login (e2e)', () => {
 
       expect(again).toMatchObject({
         isNewUser: false,
-        user: { id: first.user.id, name: '카카오 닉', providers: ['KAKAO'] },
+        user: { id: first.user.id, name: '카카오 닉', provider: 'KAKAO' },
       });
       expect((await db.query('SELECT 1 FROM users')).rowCount).toBe(1);
     });

@@ -27,7 +27,7 @@ const RESULT: LoginResult = {
   userId: '00000000-0000-7000-8000-0000000000u1',
   isNewUser: true,
   name: '가짜 사용자',
-  providers: ['GOOGLE'],
+  provider: 'GOOGLE',
 };
 
 function setup() {
@@ -86,7 +86,7 @@ describe('SocialLoginUseCase', () => {
       });
       expect(res).toMatchObject({
         isNewUser: true,
-        user: { id: RESULT.userId, name: '가짜 사용자', providers: ['GOOGLE'] },
+        user: { id: RESULT.userId, name: '가짜 사용자', provider: 'GOOGLE' },
       });
       const { payload } = await jwtVerify(
         res.accessToken,

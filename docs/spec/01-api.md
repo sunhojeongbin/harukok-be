@@ -103,7 +103,7 @@
   - `idToken`은 카카오·구글은 OIDC `id_token`, 애플은 `identityToken`
   - `name`은 **애플 최초 가입에서만** 보낸다 — 애플은 이름을 `identityToken`에 넣지 않고 최초 인가 때 SDK로만 준다. 카카오·구글은 `idToken`의 이름을 쓰고 이 필드는 무시한다
   - `authorizationCode`는 **애플에서만 필수**. 구글·카카오는 보내지 않는다
-- 응답 200: `{ accessToken, refreshToken, isNewUser, user: { id, name, providers } }`
+- 응답 200: `{ accessToken, refreshToken, isNewUser, user: { id, name, provider } }`
 - 처리 순서
   1. `idToken` 검증 → 제공자 식별자(`provider_user_id`) 추출
   2. `user_social_accounts` 조회 → 없으면 신규
@@ -145,7 +145,7 @@
 
 ### 4. GET `/users/me`
 
-- 응답 200: `{ id, name, email, providers: ['KAKAO'], createdAt }`
+- 응답 200: `{ id, name, email, provider: 'KAKAO', createdAt }`
 - 설정 화면의 "로그인 제공자 표시" 행이 이 응답을 쓴다
 - `name`·`email`은 NULL일 수 있다 (애플 relay·미제공, 카카오 동의 거부). 화면 기본 문구는 앱이 정한다
 
