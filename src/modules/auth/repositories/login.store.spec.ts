@@ -9,7 +9,7 @@ const RESULT: LoginResult = {
   userId: 'fake-user',
   isNewUser: false,
   name: null,
-  providers: ['GOOGLE'],
+  provider: 'GOOGLE',
 };
 const COMMAND = {} as LoginCommand;
 

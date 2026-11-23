@@ -50,7 +50,7 @@
      "user": {
        "id": "019a...",
        "name": "테스트 계정",
-       "providers": ["GOOGLE"]
+       "provider": "GOOGLE"
      }
    }
    ```
@@ -87,7 +87,7 @@
 
 ### 내 정보 — `GET /users/me` (Bearer)
 
-- 200 `{ id, name, email, providers, createdAt }`. 테스트 계정이면 `name: "테스트 계정"`, `providers: ["GOOGLE"]`
+- 200 `{ id, name, email, provider, createdAt }`. 테스트 계정이면 `name: "테스트 계정"`, `provider: "GOOGLE"` (계정 연동이 없어 제공자는 하나)
 
 ### 탈퇴 — `DELETE /users/me` (Bearer)
 

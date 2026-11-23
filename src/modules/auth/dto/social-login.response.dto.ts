@@ -15,8 +15,11 @@ export class LoginUserDto {
   })
   name: string | null;
 
-  @ApiProperty({ enum: SOCIAL_PROVIDERS, isArray: true })
-  providers: SocialProvider[];
+  @ApiProperty({
+    enum: SOCIAL_PROVIDERS,
+    description: '가입한 소셜 제공자. 계정 연동이 없어 사용자당 하나',
+  })
+  provider: SocialProvider;
 }
 
 export class SocialLoginResponseDto {

@@ -69,7 +69,7 @@ export class SocialLoginUseCase {
       user: {
         id: result.userId,
         name: result.name,
-        providers: result.providers,
+        provider: result.provider,
       },
     };
   }

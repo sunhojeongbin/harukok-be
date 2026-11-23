@@ -26,7 +26,7 @@ export interface LoginResult {
   userId: string;
   isNewUser: boolean;
   name: string | null;
-  providers: SocialProvider[];
+  provider: SocialProvider;
 }
 
 /** 로그인 1건을 한 트랜잭션으로 처리한다 (신규 판정 · 가입 · 약관 자동 동의 · DB 설계서 6장 기기 토큰). */
@@ -168,15 +168,17 @@ async function issueDeviceToken(
 async function profile(
   m: EntityManager,
   userId: string,
-): Promise<Pick<LoginResult, 'name' | 'providers'>> {
-  const [user]: { name: string | null }[] = await m.query(
-    'SELECT name FROM users WHERE id = $1',
-    [userId],
-  );
-  const providers: { provider: SocialProvider }[] = await m.query(
-    `SELECT provider FROM user_social_accounts
-      WHERE user_id = $1 ORDER BY created_at, provider`,
-    [userId],
-  );
-  return { name: user.name, providers: providers.map((p) => p.provider) };
+): Promise<Pick<LoginResult, 'name' | 'provider'>> {
+  // 계정 연동이 없어 소셜 계정은 사용자당 하나 — 가장 먼저 연결된 것을 쓴다
+  const [row]: { name: string | null; provider: SocialProvider }[] =
+    await m.query(
+      `SELECT u.name, s.provider
+         FROM users u
+         JOIN user_social_accounts s ON s.user_id = u.id
+        WHERE u.id = $1
+        ORDER BY s.created_at, s.provider
+        LIMIT 1`,
+      [userId],
+    );
+  return { name: row.name, provider: row.provider };
 }

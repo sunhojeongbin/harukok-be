@@ -87,7 +87,7 @@ describe('개발 전용 테스트 로그인 — DEV_TEST_LOGIN=true (e2e)', () =
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       isNewUser: false,
-      user: { id: userId, name: '테스트 계정', providers: ['GOOGLE'] },
+      user: { id: userId, name: '테스트 계정', provider: 'GOOGLE' },
     });
     expect((res.body as { accessToken: string }).accessToken).toBeTruthy();
   });

@@ -8,7 +8,7 @@ export interface UserProfile {
   id: string;
   name: string | null;
   email: string | null;
-  providers: SocialProvider[];
+  provider: SocialProvider;
   createdAt: Date;
 }
 
@@ -33,28 +33,29 @@ export class PgUsersStore implements UsersStore {
   constructor(private readonly dataSource: DataSource) {}
 
   async findProfile(userId: string): Promise<UserProfile | null> {
-    const [user]: {
+    // 계정 연동이 없어 소셜 계정은 사용자당 하나 — 가장 먼저 연결된 것을 쓴다 (가입과 같은 트랜잭션에서 만들어져 항상 있다)
+    const [row]: {
       id: string;
       name: string | null;
       email: string | null;
+      provider: SocialProvider;
       created_at: Date;
     }[] = await this.dataSource.query(
-      'SELECT id, name, email, created_at FROM users WHERE id = $1',
+      `SELECT u.id, u.name, u.email, s.provider, u.created_at
+         FROM users u
+         JOIN user_social_accounts s ON s.user_id = u.id
+        WHERE u.id = $1
+        ORDER BY s.created_at, s.provider
+        LIMIT 1`,
       [userId],
     );
-    if (!user) return null;
-    const providers: { provider: SocialProvider }[] =
-      await this.dataSource.query(
-        `SELECT provider FROM user_social_accounts
-        WHERE user_id = $1 ORDER BY created_at, provider`,
-        [userId],
-      );
+    if (!row) return null;
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      providers: providers.map((p) => p.provider),
-      createdAt: user.created_at,
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      provider: row.provider,
+      createdAt: row.created_at,
     };
   }
 
