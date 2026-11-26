@@ -1,6 +1,5 @@
 // UpdateTodoUseCase — 성공 / NOT_FOUND / 권한 / 저장 실패 (CLAUDE.md 5장)
 import { BusinessException } from '../../../common/errors/business.exception';
-import { CommonErrors } from '../../../common/errors/common.errors';
 import { TodosErrors } from '../errors/todos.errors';
 import {
   fakeStore,
@@ -20,7 +19,7 @@ async function expectNotFound(promise: Promise<unknown>) {
 }
 
 describe('UpdateTodoUseCase', () => {
-  it('성공: 보낸 필드만 바꾸고 수정된 할 일을 돌려준다', async () => {
+  it('성공: 제목을 바꾸고 수정된 할 일을 돌려준다', async () => {
     const store = fakeStore({
       update: jest.fn().mockResolvedValue({ ...TODO, title: '새 제목' }),
     });
@@ -30,29 +29,23 @@ describe('UpdateTodoUseCase', () => {
     });
 
     expect(res).toMatchObject({ title: '새 제목' });
-    expect(store.update).toHaveBeenCalledWith(USER, TODO_ID, {
-      title: '새 제목',
-    });
+    expect(store.update).toHaveBeenCalledWith(USER, TODO_ID, '새 제목');
   });
 
-  it('title · dueDate 둘 다 없으면 VALIDATION_FAILED, 저장소를 부르지 않는다', async () => {
-    const store = fakeStore();
+  // 2026-11-26 명세 변경: 날짜는 수정 대상이 아니다 — 저장소에 제목만 넘긴다
+  it('날짜는 바꾸지 않는다: 저장소에는 제목만 넘긴다', async () => {
+    const store = fakeStore({ update: jest.fn().mockResolvedValue(TODO) });
 
-    const result = new UpdateTodoUseCase(store).execute(USER, TODO_ID, {});
+    await new UpdateTodoUseCase(store).execute(USER, TODO_ID, { title: 'x' });
 
-    await expect(result).rejects.toMatchObject({
-      definition: CommonErrors.VALIDATION_FAILED,
-    });
-    expect(store.update).not.toHaveBeenCalled();
+    expect(store.update.mock.calls[0]).toEqual([USER, TODO_ID, 'x']);
   });
 
   it('NOT_FOUND: 없거나 · 타인 소유 · 소프트 삭제면 TODO_NOT_FOUND', async () => {
     const store = fakeStore({ update: jest.fn().mockResolvedValue(null) });
 
     await expectNotFound(
-      new UpdateTodoUseCase(store).execute(USER, TODO_ID, {
-        dueDate: '2026-11-18',
-      }),
+      new UpdateTodoUseCase(store).execute(USER, TODO_ID, { title: 'x' }),
     );
   });
 

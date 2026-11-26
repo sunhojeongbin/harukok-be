@@ -1,10 +1,10 @@
 > 노션 원본: https://app.notion.com/p/417b98b30299801ab97fe1ec4570db74
-> 원본 최종 수정: 2026-11-17 (할 일 — 완료 변경 · 삭제 멱등)
-> 동기화: 2026-11-13 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
+> 원본 최종 수정: 2026-11-26 (홈 달력 현황 `GET /todos/stats` 추가 · 할 일 수정에서 날짜 제거)
+> 동기화: 2026-11-26 (노션 → 저장소 한 방향. 이 파일을 직접 고치지 말 것)
 
 # 🔌 API 설계서 (MVP v1)
 
-**엔드포인트 12개** (인증·계정 6 / 할 일 6)
+**엔드포인트 13개** (인증·계정 6 / 할 일 7)
 
 - 기준 문서: [MVP v1 기능 명세서 (재정의)](00-feature-spec.md) · [DB 설계서 (MVP v1)](02-db-design.md)
 - 스택: NestJS + TypeORM / PostgreSQL 18
@@ -27,6 +27,7 @@
 | 8 | 목록 조회 범위 | 단일 날짜 `?date=` | 서비스 정의 "날짜 하나, 목록 하나". 범위 조회는 v1.1 (5-5) |
 | 9 | 애플 토큰 검증 | `identityToken` 검증 + `authorizationCode` 교환 **둘 다** | 탈퇴 시 `/auth/revoke`가 refresh token을 요구한다. Apple TN3194 권장 흐름 (5-6) |
 | 10 | 소셜 연동 해제 | 애플 서버 revoke · 카카오 서버 unlink(어드밌 키) · 구글 클라이언트 disconnect | 토큰을 저장해야 하는 것은 애플뿐이다 (5-6) |
+| 11 | 홈 달력 할 일 현황 | 기간 기반 `GET /todos/stats?startDate=&endDate=` 1개 — 주간·월간 공용 (2026-11-26 추가) | 모드별 API를 두면 주 시작 요일·월간 6주 그리드 규칙을 서버가 알아야 한다. ID는 넣지 않고 개수만 (5-7) |
 
 ---
 
@@ -43,6 +44,7 @@
 | 스플래시 | 자동 로그인 판정 | `POST /auth/token/refresh` |
 | 홈 | 할 일 목록 조회 | `GET /todos?date=` |
 | 홈 | 완료 상태 변경 | `PATCH /todos/{todoId}/completion` |
+| 홈 | 달력 날짜별 할 일 현황 (주간·월간) — 기능 명세서 행 추가 필요 | `GET /todos/stats?startDate=&endDate=` |
 | 할 일 작성 | 할 일 등록 | `POST /todos` |
 | 할 일 작성 | 할 일 수정 | `PATCH /todos/{todoId}` |
 | 할 일 작성 | 할 일 삭제 | `DELETE /todos/{todoId}` |
@@ -65,7 +67,7 @@
 
 ---
 
-## 3. 엔드포인트 목록 (12개)
+## 3. 엔드포인트 목록 (13개)
 
 ### 3-1. 인증 · 계정 (6개)
 
@@ -78,16 +80,17 @@
 | 5 | DELETE | `/users/me` | Bearer | 회원 탈퇴 (CASCADE 전체 파기) |
 | 6 | GET | `/terms` | 없음 | 현행 이용약관 (id · version · contentUrl) |
 
-### 3-2. 할 일 (6개)
+### 3-2. 할 일 (7개)
 
 | # | Method | Path | 인증 | 설명 |
 | --- | --- | --- | --- | --- |
 | 7 | GET | `/todos?date=YYYY-MM-DD` | Bearer | 날짜별 목록 (완료/미완료 포함) |
 | 8 | POST | `/todos` | Bearer | 등록 |
-| 9 | PATCH | `/todos/{todoId}` | Bearer | 제목 · 날짜 수정 |
+| 9 | PATCH | `/todos/{todoId}` | Bearer | 제목 수정 (날짜는 수정 불가) |
 | 10 | PATCH | `/todos/{todoId}/completion` | Bearer | 완료 상태 변경 |
 | 11 | DELETE | `/todos/{todoId}` | Bearer | 소프트 삭제 |
 | 12 | POST | `/todos/{todoId}/restore` | Bearer | 삭제 되돌리기 |
+| 13 | GET | `/todos/stats?startDate=&endDate=` | Bearer | 기간 내 날짜별 할 일 개수 · 완료 개수 (홈 달력) |
 
 `/terms`를 둔 이유: 약관 **본문**은 WebView(서버 개발 없음)지만, 현행 약관의 링크와 버전은 서버가 알려줘야 한다. 앱에 하드코딩하면 약관 개정 시 앱 업데이트 없이는 반영되지 않는다. 동의 이력은 가입 시 서버가 같은 현행 약관(`terms.id`)로 기록한다. DB 설계서가 `version` UNIQUE로 개정 이력을 누적하도록 잡아둔 것과 짝이 맞는다. 약관은 **이용약관 1종**이다. 개인정보 처리방침은 동의 이력을 두지 않고 앱이 노션 링크로 보여준다.
 
@@ -192,7 +195,9 @@
 
 ### 9. PATCH `/todos/{todoId}`
 
-- 요청: `{ title?, dueDate? }` — 둘 다 없으면 400
+- 요청: `{ title }` — `title` 필수. **날짜(`dueDate`)는 수정 대상이 아니다** (2026-11-26 변경)
+  - 수정 DTO에 `dueDate` 필드를 두지 않는다. 요청에 포함되면 전역 `ValidationPipe` 설정에 따라 무시(`whitelist`)되거나 400(`forbidNonWhitelisted`)이 된다
+  - `title` 검증은 등록과 같다 (6-2)
 - 응답 200: 수정된 할 일
 - 에러: `TODO_NOT_FOUND`(404) — 타인 소유·소프트 삭제된 건도 동일하게 404 (존재 여부 노출 금지)
 
@@ -218,6 +223,29 @@
 - `UPDATE todos SET deleted_at = NULL WHERE id = $todoId AND user_id = $userId AND deleted_at IS NOT NULL`
 - 멱등 — 이미 살아있으면 0건 영향, 그대로 200
 - 7일 보존 기간이 지나 하드 삭제된 뒤에는 404
+
+### 13. GET `/todos/stats?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`
+
+- 용도: 홈 달력(주간·월간)의 날짜별 할 일 개수 · 완료 개수
+- **모드 파라미터 없음.** 앱이 화면에 보이는 첫날 \~ 마지막날을 보낸다 (5-7)
+  - 주간: 해당 주 7일
+  - 월간: 6주 그리드의 첫날 \~ 마지막날 (예: 11월 → `2026-10-26` \~ `2026-12-06`)
+- 응답 200: `{ startDate, endDate, summary: { totalCount, completedCount }, days: [{ date, totalCount, completedCount }] }`
+  - `days`는 범위의 **모든 날짜**를 오름차순으로 담는다 — 할 일이 없는 날도 `0, 0`
+  - `summary`는 `days` 합계. 쿼리를 추가하지 않는다
+  - 완료율은 내려주지 않는다 — 반올림 등 표시 규칙은 FE가 정한다
+  - 할 일 ID · 제목은 넣지 않는다. 날짜를 탭하면 `GET /todos?date=`로 목록을 받는다
+- 검증
+  - 두 날짜 모두 `YYYY-MM-DD` 날짜 문자열 (5-5)
+  - `startDate > endDate` → 400
+  - 기간 최대 **42일**(양 끝 포함) — 월간 6주 그리드 기준. 초과 시 400
+- 조건 `user_id = $userId AND deleted_at IS NULL`, 완료 판정 `completed_at IS NOT NULL`
+
+- `generate_series` + `LEFT JOIN`으로 빈 날짜를 DB에서 0으로 채운다. FE에 날짜 채우기 로직이 필요 없다
+- `COUNT`는 bigint라 pg 드라이버가 문자열로 넘긴다 → `::int` 캐스팅
+- 날짜는 `to_char`로 문자열화한다 — 드라이버의 date → JS `Date` 변환에서 서버 타임존 때문에 하루 밀리는 것을 막는다 (DB 설계서 5-1과 같은 문제)
+- 에러: `VALIDATION_FAILED`(400) · `ACCESS_TOKEN_INVALID`(401)
+- ⚠️ 경로 충돌 — v1에는 `GET /todos/{todoId}`가 없어 충돌하지 않는다. v1.1에서 단건 조회를 추가하면 `stats`를 먼저 선언하거나 `todoId`에 `ParseUUIDPipe`를 건다
 
 ---
 
@@ -269,7 +297,7 @@ DB 설계서 7장이 "삭제 후 재생성(POST)"을 탈락시킨 이유도 이�
 
 ### 5-5. 목록 조회는 단일 날짜, `dueDate`는 날짜 문자열
 
-- 서비스 정의가 "날짜 하나, 목록 하나"다. 범위 조회는 v1 범위 밖
+- 서비스 정의가 "날짜 하나, 목록 하나"다. 목록 범위 조회는 v1 범위 밖 (달력용 개수 집계는 목록이 아니므로 별도 API로 둔다, 5-7)
 - 스키마는 이미 준비돼 있다 — DB 설계서 검증에서 월 범위가 Bitmap Index Scan으로 확인됐다. 날짜 좌우 이동 프리페치가 필요해지면 `?from=&to=`를 추가하면 된다
 - 요청·응답 모두 `YYYY-MM-DD`. ISO 8601 전체 형식(`2026-11-12T00:00:00+09:00`)을 받으면 안 된다. 받는 순간 타임존 변환 여지가 생기고, DB 설계서 5-1이 `date` 타입으로 막아둔 "날짜 하루 밀림"이 API 경계에서 되살아난다
 
@@ -355,6 +383,24 @@ target_id_type=user_id&target_id={provider_user_id}
 - 따라서 **앱이 탈퇴 플로우에서 SDK `disconnect()`를 호출**하고, 서버는 DB 삭제만 담당한다. 구글 문서도 구글로 로그인한 사용자에게 연결 해제 수단을 제공하고 계정 삭제 시 구글에서 받은 정보를 함께 삭제하라고 안내한다
 - ⚠️ 웹용 `google.accounts.id.revoke`는 ID 토큰 공유 동의만 취소하며 OAuth 권한 범위에는 적용되지 않는다. 네이티브 앱에는 SDK `disconnect()`를 쓴다
 
+### 5-7. 달력 현황은 기간 기반 1개로 — 주간·월간 공용 (2026-11-26 추가)
+
+홈 달력은 주간·월간 모드를 바꿀 수 있다. 모드마다 필요한 것은 **보이는 날짜 범위**만 다르고, 날짜별로 개수를 세는 로직은 같다.
+
+| 방식 | 형태 | 판단 |
+| --- | --- | --- |
+| **A. 기간 기반** | `GET /todos/stats?startDate=&endDate=` | ✅ 채택. 주간·월간·임의 기간 모두 1개로 처리 |
+| B. 모드 기반 | `GET /todos/stats?view=week&date=` | 서버가 주 시작 요일 · 월간 6주 그리드의 앞뒤 달 칸 수를 알아야 한다. 디자인이 바뀌면 서버도 바뀐다 |
+| C. 모드별 분리 | `/stats/weekly`  • `/stats/monthly` | 로직이 같은데 엔드포인트만 늘어난다 |
+
+- 달력 위젯은 화면에 보이는 첫날·마지막날을 이미 알고 있어 A의 FE 부담은 거의 없다
+- 처음 검토한 이름 `/stats/daily`는 "일 단위 집계"라는 뜻이었지만 "일간 모드 전용"으로 읽혀서 쓰지 않는다
+- **ID를 넣지 않는 이유** — 달력 점·달성률 표시에는 개수만 필요하다. ID만 받아도 제목·완료 여부를 보려면 결국 목록을 다시 조회해야 하므로, 개수 API + `GET /todos?date=` 목록 API로 나누는 것이 가장 단순하다. 필요해지면 `includeTodoIds=true` 옵션으로 기존 응답을 깨지 않고 확장한다
+- **42일 상한** — 화면에 필요한 최대 범위가 월간 6주 그리드(42일)다. 상한이 없으면 1년치 같은 요청이 그대로 들어온다. 통계 화면 등이 생기면 그때 늘린다
+- 목록 범위 조회(`GET /todos?from=&to=`)와는 다르다. 목록은 여전히 v1.1이고, 이 API는 개수 집계만 한다
+- 인덱스는 추가하지 않는다 — DB 설계서 검증에서 월 범위 조회가 Bitmap Index Scan으로 확인됐다. 다만 `generate_series` LEFT JOIN 형태에서도 유지되는지 EXPLAIN으로 한 번 확인한다
+- 주 단위 묶음(주별 완료율 그래프 등)이 필요해지면 `groupBy=day|week`를 추가한다. 기본값 `day`로 두면 기존 클라이언트는 영향이 없다 — v1에서는 만들지 않는다
+
 ---
 
 ## 6. 공통 규약
@@ -409,7 +455,7 @@ target_id_type=user_id&target_id={provider_user_id}
 | 미포함 | 이유 |
 | --- | --- |
 | `GET /todos/{todoId}` 단건 조회 | 작성 화면은 목록 데이터로 채운다 |
-| `GET /todos?from=&to=` 범위 조회 | v1.1 |
+| `GET /todos?from=&to=` 범위 조회 | v1.1. 달력에 필요한 것은 개수뿐이라 `GET /todos/stats`로 대체 (5-7) |
 | 휴지통 목록 API | 소프트 삭제는 하되 복구 UI는 스낵바뿐 (DB 설계서 7장) |
 | 기기 목록·개별 로그아웃 API | 기기 관리 화면이 MVP에 없다. 3대 초과는 자동 폐기 |
 | 약관 본문 조회 API | `contentUrl`만 주고 본문은 WebView |
@@ -452,3 +498,6 @@ target_id_type=user_id&target_id={provider_user_id}
 - [ ] UseCase별 `.spec.ts` 작성 — 성공 / NOT\_FOUND / 권한 / 저장 실패 4케이스 (`CLAUDE.md` 테스트 규칙)
 - [ ] 조회·수정·완료변경 전 쿼리에 `AND deleted_at IS NULL` 적용 점검 — 누락 시 삭제된 할 일 노출 + Seq Scan
 - [ ] 자유 텍스트 필드 `@StripHtml()` 적용 점검 (`title`, `name`)
+- [ ] 기능 명세서(MVP v1)에 홈 달력 현황 행 추가 — 이 문서 2장 매핑과 맞춘다
+- [ ] `GET /todos/stats` 테스트 — 빈 날짜 0 채움 / 타인 할 일 미포함 / 소프트 삭제 제외 / 42일 통과 · 43일 400 / `startDate > endDate` 400 / 월 경계 범위(10/26 \~ 12/06)
+- [ ] 달력 집계 쿼리 EXPLAIN — `generate_series` LEFT JOIN에서도 인덱스 스캔이 유지되는지

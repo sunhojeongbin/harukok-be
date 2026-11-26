@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsBoolean, IsString } from 'class-validator';
 import { StripHtml } from '../../../common/text/strip-html';
 import { IsDateOnly } from '../../../common/validation/date-only';
 import { TextLength } from '../../../common/validation/text-length';
@@ -32,19 +32,16 @@ export class CreateTodoDto {
   dueDate: string;
 }
 
-/** 둘 다 없으면 400 — UpdateTodoUseCase 가 검사한다 */
+/**
+ * 제목만 수정한다 — 날짜는 수정 대상이 아니다 (API 설계서 4장 9번, 2026-11-26 변경).
+ * dueDate 필드를 두지 않으므로 보내면 전역 ValidationPipe(forbidNonWhitelisted)가 400 으로 거부한다
+ */
 export class UpdateTodoDto {
-  @ApiPropertyOptional(TITLE_DOC)
-  @IsOptional()
+  @ApiProperty(TITLE_DOC)
   @StripHtml()
   @IsString()
   @TextLength(1, 250)
-  title?: string;
-
-  @ApiPropertyOptional(DUE_DATE_DOC)
-  @IsOptional()
-  @IsDateOnly()
-  dueDate?: string;
+  title: string;
 }
 
 export class ChangeCompletionDto {
@@ -83,4 +80,49 @@ export class CompletionResponseDto {
 
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   completedAt: string | null;
+}
+
+/** 기간 검증(startDate ≤ endDate, 최대 42일)은 GetTodoStatsUseCase 가 한다 */
+export class TodoStatsQueryDto {
+  @ApiProperty({ ...DUE_DATE_DOC, example: '2026-11-22' })
+  @IsDateOnly()
+  startDate: string;
+
+  @ApiProperty({
+    ...DUE_DATE_DOC,
+    example: '2026-11-28',
+    description: 'YYYY-MM-DD. startDate 이상, 양 끝 포함 최대 42일',
+  })
+  @IsDateOnly()
+  endDate: string;
+}
+
+export class TodoStatsCountDto {
+  @ApiProperty({ example: 5 })
+  totalCount: number;
+
+  @ApiProperty({ example: 3 })
+  completedCount: number;
+}
+
+export class TodoStatsDayDto extends TodoStatsCountDto {
+  @ApiProperty({ example: '2026-11-22' })
+  date: string;
+}
+
+export class TodoStatsResponseDto {
+  @ApiProperty({ example: '2026-11-22' })
+  startDate: string;
+
+  @ApiProperty({ example: '2026-11-28' })
+  endDate: string;
+
+  @ApiProperty({ type: TodoStatsCountDto, description: 'days 합계' })
+  summary: TodoStatsCountDto;
+
+  @ApiProperty({
+    type: [TodoStatsDayDto],
+    description: '범위의 모든 날짜 오름차순. 할 일이 없는 날도 0 · 0',
+  })
+  days: TodoStatsDayDto[];
 }

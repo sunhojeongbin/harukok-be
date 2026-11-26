@@ -33,11 +33,14 @@ import {
   CreateTodoDto,
   ListTodosQueryDto,
   TodoResponseDto,
+  TodoStatsQueryDto,
+  TodoStatsResponseDto,
   UpdateTodoDto,
 } from '../dto/todo.dto';
 import { ChangeCompletionUseCase } from '../usecases/change-completion.usecase';
 import { CreateTodoUseCase } from '../usecases/create-todo.usecase';
 import { DeleteTodoUseCase } from '../usecases/delete-todo.usecase';
+import { GetTodoStatsUseCase } from '../usecases/get-todo-stats.usecase';
 import { ListTodosUseCase } from '../usecases/list-todos.usecase';
 import { RestoreTodoUseCase } from '../usecases/restore-todo.usecase';
 import { UpdateTodoUseCase } from '../usecases/update-todo.usecase';
@@ -64,7 +67,28 @@ export class TodosController {
     private readonly changeCompletion: ChangeCompletionUseCase,
     private readonly deleteTodo: DeleteTodoUseCase,
     private readonly restoreTodo: RestoreTodoUseCase,
+    private readonly todoStats: GetTodoStatsUseCase,
   ) {}
+
+  // ':todoId' 경로보다 먼저 둔다 — v1 에는 GET /todos/{todoId} 가 없지만 v1.1 에서 생겨도 충돌하지 않게 (API 설계서 4장 13번)
+  @Get('stats')
+  @ApiOperation({
+    summary: '홈 달력 날짜별 할 일 개수 · 완료 개수 (주간 · 월간 공용)',
+    description:
+      '앱이 화면에 보이는 첫날 ~ 마지막날을 보낸다. 범위의 모든 날짜를 오름차순으로, 할 일이 없는 날도 0 · 0',
+  })
+  @ApiOkResponse({ type: TodoStatsResponseDto })
+  @ApiBadRequestResponse({
+    type: ErrorBodyDto,
+    description:
+      'VALIDATION_FAILED — 날짜 형식(YYYY-MM-DD) · startDate > endDate · 42일 초과',
+  })
+  stats(
+    @CurrentUserId() userId: string,
+    @Query() query: TodoStatsQueryDto,
+  ): Promise<TodoStatsResponseDto> {
+    return this.todoStats.execute(userId, query);
+  }
 
   @Get()
   @ApiOperation({
@@ -100,8 +124,9 @@ export class TodosController {
 
   @Patch(':todoId')
   @ApiOperation({
-    summary: '제목 · 날짜 수정',
-    description: '둘 다 없으면 400',
+    summary: '제목 수정',
+    description:
+      '날짜(dueDate)는 수정할 수 없다 — 보내면 400. title 검증은 등록과 같다',
   })
   @ApiOkResponse({ type: TodoResponseDto })
   @ApiBadRequestResponse({
