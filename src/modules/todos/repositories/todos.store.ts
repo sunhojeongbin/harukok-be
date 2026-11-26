@@ -39,6 +39,29 @@ const toRecord = (r: TodoRow): TodoRecord => ({
   createdAt: r.created_at,
 });
 
+/**
+ * 홈 달력 날짜별 개수 (API 설계서 4장 13번). generate_series + LEFT JOIN 으로 빈 날짜를 0 으로 채운다.
+ * COUNT 는 bigint 라 드라이버가 문자열로 주므로 ::int, 날짜는 JS Date 변환 시 타임존 밀림을 피하려 to_char.
+ * $1 startDate, $2 endDate, $3 userId
+ */
+export const TODO_STATS_SQL = `SELECT
+  to_char(d::date, 'YYYY-MM-DD')                              AS date,
+  COUNT(t.id)::int                                            AS "totalCount",
+  COUNT(t.id) FILTER (WHERE t.completed_at IS NOT NULL)::int  AS "completedCount"
+FROM generate_series($1::date, $2::date, interval '1 day') AS d
+LEFT JOIN todos t
+  ON  t.due_date   = d::date
+  AND t.user_id    = $3
+  AND t.deleted_at IS NULL
+GROUP BY d
+ORDER BY d`;
+
+export interface TodoDayCount {
+  date: string;
+  totalCount: number;
+  completedCount: number;
+}
+
 /** 모든 조회 · 수정 · 완료 변경은 user_id 와 deleted_at IS NULL 을 조건에 넣는다 (CLAUDE.md 4장) */
 export interface TodosStore {
   list(userId: string, dueDate: string): Promise<TodoRecord[]>;
@@ -48,10 +71,11 @@ export interface TodosStore {
     title: string,
     dueDate: string,
   ): Promise<TodoRecord | null>;
+  /** 제목만 바꾼다 — 날짜는 수정 대상이 아니다 */
   update(
     userId: string,
     todoId: string,
-    changes: { title?: string; dueDate?: string },
+    title: string,
   ): Promise<TodoRecord | null>;
   setCompleted(
     userId: string,
@@ -61,6 +85,12 @@ export interface TodosStore {
   softDelete(userId: string, todoId: string): Promise<DeleteOutcome>;
   /** 복구 후(또는 이미 살아 있으면 그대로) 살아 있는 할 일. 없거나 타인 소유면 NULL */
   restore(userId: string, todoId: string): Promise<TodoRecord | null>;
+  /** startDate ~ endDate 의 모든 날짜(오름차순)와 그날의 내 할 일 개수 · 완료 개수 */
+  countByDate(
+    userId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<TodoDayCount[]>;
 }
 
 @Injectable()
@@ -98,17 +128,16 @@ export class PgTodosStore implements TodosStore {
   async update(
     userId: string,
     todoId: string,
-    changes: { title?: string; dueDate?: string },
+    title: string,
   ): Promise<TodoRecord | null> {
     const [row]: TodoRow[] = await this.dataSource.query(
       `WITH u AS (
          UPDATE todos
-            SET title = COALESCE($3, title),
-                due_date = COALESCE($4::date, due_date)
+            SET title = $3
           WHERE id = $2 AND user_id = $1 AND deleted_at IS NULL
          RETURNING ${COLUMNS}
        ) SELECT * FROM u`,
-      [userId, todoId, changes.title ?? null, changes.dueDate ?? null],
+      [userId, todoId, title],
     );
     return row ? toRecord(row) : null;
   }
@@ -167,6 +196,14 @@ export class PgTodosStore implements TodosStore {
       [userId, todoId],
     );
     return row ? toRecord(row) : null;
+  }
+
+  async countByDate(
+    userId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<TodoDayCount[]> {
+    return this.dataSource.query(TODO_STATS_SQL, [startDate, endDate, userId]);
   }
 }
 

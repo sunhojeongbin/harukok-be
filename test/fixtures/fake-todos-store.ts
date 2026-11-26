@@ -36,6 +36,7 @@ export function fakeStore(
     setCompleted: jest.fn(),
     softDelete: jest.fn(),
     restore: jest.fn(),
+    countByDate: jest.fn(),
     ...overrides,
   };
 }
