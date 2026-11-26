@@ -211,11 +211,11 @@ describe('Swagger /docs (e2e)', () => {
 
       expect({
         date: param('/todos', 'date'),
-        createDueDate: props('CreateTodoDto').dueDate?.description,
+        createDueDate: props('CreateTodoRequestDto').dueDate?.description,
         startDate: param('/todos/stats', 'startDate'),
         endDate: param('/todos/stats', 'endDate'),
-        title: props('CreateTodoDto').title?.description,
-        updateTitle: props('UpdateTodoDto').title?.description,
+        title: props('CreateTodoRequestDto').title?.description,
+        updateTitle: props('UpdateTodoRequestDto').title?.description,
       }).toEqual({
         date: '할 일 목록 조회 날짜',
         createDueDate: '할 일 등록 날짜',
@@ -234,8 +234,8 @@ describe('Swagger /docs (e2e)', () => {
       const requests = [
         'SocialLoginRequestDto',
         'SessionRequestDto',
-        'CreateTodoDto',
-        'UpdateTodoDto',
+        'CreateTodoRequestDto',
+        'UpdateTodoRequestDto',
       ];
       const missing = requests.flatMap((schema) =>
         Object.entries(doc.components.schemas?.[schema]?.properties ?? {})
@@ -307,6 +307,30 @@ describe('Swagger /docs (e2e)', () => {
         refOf('LoginUserDto', 'provider'),
         refOf('UserMeResponseDto', 'provider'),
       ]).toEqual(Array(3).fill('#/components/schemas/SocialProvider'));
+    });
+
+    // 이름만 보고 용도를 알 수 있게 — 요청은 …RequestDto, 응답은 …ResponseDto (쿼리 DTO 는 스키마가 아니라 파라미터로 풀린다)
+    it('DTO 스키마 이름은 RequestDto · ResponseDto 규칙을 따른다', () => {
+      expect(Object.keys(doc.components.schemas ?? {}).sort()).toEqual(
+        [
+          'ChangeCompletionRequestDto',
+          'CompletionResponseDto',
+          'CreateTodoRequestDto',
+          'ErrorResponseDto',
+          'HealthResponseDto',
+          'LoginUserDto',
+          'RefreshTokenResponseDto',
+          'SessionRequestDto',
+          'SocialLoginRequestDto',
+          'SocialLoginResponseDto',
+          'SocialProvider',
+          'TermResponseDto',
+          'TodoResponseDto',
+          'TodoStatsDayResponseDto',
+          'UpdateTodoRequestDto',
+          'UserMeResponseDto',
+        ].sort(),
+      );
     });
 
     it('Bearer 인증 스키마를 등록한다', () => {

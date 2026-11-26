@@ -19,7 +19,7 @@ export class ListTodosQueryDto {
   date: string;
 }
 
-export class CreateTodoDto {
+export class CreateTodoRequestDto {
   @ApiProperty(TITLE_DOC)
   @StripHtml()
   @IsString()
@@ -35,7 +35,7 @@ export class CreateTodoDto {
  * 제목만 수정한다 — 날짜는 수정 대상이 아니다 (API 설계서 4장 9번, 2026-11-26 변경).
  * dueDate 필드를 두지 않으므로 보내면 전역 ValidationPipe(forbidNonWhitelisted)가 400 으로 거부한다
  */
-export class UpdateTodoDto {
+export class UpdateTodoRequestDto {
   @ApiProperty(TITLE_DOC)
   @StripHtml()
   @IsString()
@@ -43,7 +43,7 @@ export class UpdateTodoDto {
   title: string;
 }
 
-export class ChangeCompletionDto {
+export class ChangeCompletionRequestDto {
   @ApiProperty({
     description: 'true → 완료(처음 완료 시각 유지), false → 미완료',
   })
@@ -113,7 +113,7 @@ export class TodoStatsQueryDto {
 }
 
 /** 날짜별 개수 — GET /todos/stats 는 이 배열만 내려준다 (감싸는 객체 · 기간 · 합계 없음) */
-export class TodoStatsDayDto {
+export class TodoStatsDayResponseDto {
   @ApiProperty({
     ...DATE_FORMAT,
     example: '2026-11-22',

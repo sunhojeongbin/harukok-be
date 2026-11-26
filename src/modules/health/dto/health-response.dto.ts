@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { HealthResult } from '../usecases/check-health.usecase';
 
-export class HealthResultDto implements HealthResult {
+export class HealthResponseDto implements HealthResult {
   @ApiProperty({
     enum: ['ok'],
     description: '서버가 요청을 처리할 수 있으면 ok',

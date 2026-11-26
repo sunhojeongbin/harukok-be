@@ -5,7 +5,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { ErrorBodyDto } from '../../../common/swagger/error-body.dto';
+import { ErrorResponseDto } from '../../../common/swagger/error-response.dto';
 import { TermResponseDto } from '../dto/term-response.dto';
 import { GetCurrentTermsUseCase } from '../usecases/get-current-terms.usecase';
 
@@ -22,7 +22,7 @@ export class TermsController {
   })
   @ApiOkResponse({ type: TermResponseDto })
   @ApiNotFoundResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description: 'TERM_NOT_FOUND — 시행 중인 이용약관이 없음',
   })
   get(): Promise<TermResponseDto> {
