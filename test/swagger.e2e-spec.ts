@@ -16,7 +16,13 @@ interface OpenApiDoc {
         responses: Record<string, unknown>;
         tags?: string[];
         security?: Record<string, string[]>[];
-        parameters?: { name: string; in: string; description?: string }[];
+        parameters?: {
+          name: string;
+          in: string;
+          description?: string;
+          example?: unknown;
+          schema?: { example?: unknown };
+        }[];
       }
     >
   >;
@@ -24,7 +30,21 @@ interface OpenApiDoc {
     securitySchemes?: Record<string, { scheme?: string }>;
     schemas?: Record<
       string,
-      { properties?: Record<string, { description?: string }> }
+      {
+        enum?: string[];
+        properties?: Record<
+          string,
+          {
+            description?: string;
+            example?: unknown;
+            maxLength?: number;
+            enum?: string[];
+            type?: string;
+            $ref?: string;
+            allOf?: { $ref?: string }[];
+          }
+        >;
+      }
     >;
   };
 }
@@ -204,6 +224,89 @@ describe('Swagger /docs (e2e)', () => {
         title: '할 일 제목(HTML 제거 후 1~250자, 공백 거부)',
         updateTitle: '할 일 제목(HTML 제거 후 1~250자, 공백 거부)',
       });
+    });
+
+    const prop = (schema: string, field: string) =>
+      doc.components.schemas?.[schema]?.properties?.[field];
+
+    // 요청에 직접 입력하는 값 — 예시가 없으면 Swagger UI 에 "string" 만 보인다 (enum · boolean 은 UI 가 채운다)
+    it('요청 DTO 의 문자열 필드에는 예시가 있다', () => {
+      const requests = [
+        'SocialLoginRequestDto',
+        'SessionRequestDto',
+        'CreateTodoDto',
+        'UpdateTodoDto',
+      ];
+      const missing = requests.flatMap((schema) =>
+        Object.entries(doc.components.schemas?.[schema]?.properties ?? {})
+          .filter(
+            ([, p]) =>
+              p.type === 'string' && !p.enum && p.example === undefined,
+          )
+          .map(([field]) => `${schema}.${field}`),
+      );
+
+      expect(missing).toEqual([]);
+    });
+
+    it('응답의 자유 텍스트 · 토큰 필드에는 예시가 있다', () => {
+      const fields: [string, string][] = [
+        ['TodoResponseDto', 'title'],
+        ['LoginUserDto', 'name'],
+        ['UserMeResponseDto', 'name'],
+        ['UserMeResponseDto', 'email'],
+        ['SocialLoginResponseDto', 'accessToken'],
+        ['SocialLoginResponseDto', 'refreshToken'],
+        ['RefreshTokenResponseDto', 'accessToken'],
+        ['RefreshTokenResponseDto', 'refreshToken'],
+      ];
+
+      expect(
+        fields
+          .filter(([s, f]) => prop(s, f)?.example === undefined)
+          .map(([s, f]) => `${s}.${f}`),
+      ).toEqual([]);
+    });
+
+    it('검증의 최대 길이를 문서에도 적는다', () => {
+      expect({
+        idToken: prop('SocialLoginRequestDto', 'idToken')?.maxLength,
+        authorizationCode: prop('SocialLoginRequestDto', 'authorizationCode')
+          ?.maxLength,
+        name: prop('SocialLoginRequestDto', 'name')?.maxLength,
+        refreshToken: prop('SessionRequestDto', 'refreshToken')?.maxLength,
+        deviceId: prop('SessionRequestDto', 'deviceId')?.maxLength,
+      }).toEqual({
+        idToken: 8192,
+        authorizationCode: 4096,
+        name: 500,
+        refreshToken: 128,
+        deviceId: 128,
+      });
+    });
+
+    it('deviceId 설명에 공백만은 거부한다고 적는다', () => {
+      for (const schema of ['SocialLoginRequestDto', 'SessionRequestDto']) {
+        expect(prop(schema, 'deviceId')?.description).toMatch(/공백/);
+      }
+    });
+
+    it('소셜 제공자 enum 은 공유 스키마 SocialProvider 하나로 참조한다', () => {
+      const refOf = (schema: string, field: string) => {
+        const p = prop(schema, field);
+        return p?.$ref ?? p?.allOf?.[0]?.$ref;
+      };
+
+      expect(doc.components.schemas?.SocialProvider?.enum).toEqual([
+        'KAKAO',
+        'APPLE',
+        'GOOGLE',
+      ]);
+      expect([
+        refOf('SocialLoginRequestDto', 'provider'),
+        refOf('LoginUserDto', 'provider'),
+        refOf('UserMeResponseDto', 'provider'),
+      ]).toEqual(Array(3).fill('#/components/schemas/SocialProvider'));
     });
 
     it('Bearer 인증 스키마를 등록한다', () => {

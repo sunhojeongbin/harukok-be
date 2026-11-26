@@ -8,6 +8,7 @@ import { TextLength } from '../../../common/validation/text-length';
 const TITLE_DOC = {
   minLength: 1,
   maxLength: 250,
+  example: '장보기',
   description: '할 일 제목(HTML 제거 후 1~250자, 공백 거부)',
 };
 const DATE_FORMAT = { example: '2026-11-17', format: 'date' } as const;
@@ -54,7 +55,10 @@ export class TodoResponseDto {
   @ApiProperty({ format: 'uuid', description: '할 일 ID' })
   id: string;
 
-  @ApiProperty({ description: '할 일 제목 (HTML 제거된 값)' })
+  @ApiProperty({
+    example: '장보기',
+    description: '할 일 제목 (HTML 제거된 값)',
+  })
   title: string;
 
   @ApiProperty({ ...DATE_FORMAT, description: '할 일 등록 날짜' })
