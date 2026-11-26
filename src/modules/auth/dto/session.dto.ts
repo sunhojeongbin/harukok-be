@@ -20,7 +20,9 @@ export class SessionRequestDto {
 }
 
 export class RefreshTokenResponseDto {
-  @ApiProperty({ description: 'JWT. 1시간' })
+  @ApiProperty({
+    description: 'API 호출용 토큰. Authorization: Bearer 헤더에 넣는다 (1시간)',
+  })
   accessToken: string;
 
   @ApiProperty({

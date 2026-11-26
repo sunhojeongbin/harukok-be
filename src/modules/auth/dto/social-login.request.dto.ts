@@ -16,7 +16,10 @@ import {
 
 /** 약관 동의 필드는 두지 않는다 — 신규 가입 시 서버가 현행 이용약관에 자동 동의로 기록한다 (API 설계서 5-2 변경) */
 export class SocialLoginRequestDto {
-  @ApiProperty({ enum: SOCIAL_PROVIDERS })
+  @ApiProperty({
+    enum: SOCIAL_PROVIDERS,
+    description: '로그인한 소셜 제공자',
+  })
   @IsIn(SOCIAL_PROVIDERS)
   provider: SocialProvider;
 

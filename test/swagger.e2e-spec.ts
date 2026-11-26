@@ -16,10 +16,17 @@ interface OpenApiDoc {
         responses: Record<string, unknown>;
         tags?: string[];
         security?: Record<string, string[]>[];
+        parameters?: { name: string; in: string; description?: string }[];
       }
     >
   >;
-  components: { securitySchemes?: Record<string, { scheme?: string }> };
+  components: {
+    securitySchemes?: Record<string, { scheme?: string }>;
+    schemas?: Record<
+      string,
+      { properties?: Record<string, { description?: string }> }
+    >;
+  };
 }
 
 describe('Swagger /docs (e2e)', () => {
@@ -143,6 +150,60 @@ describe('Swagger /docs (e2e)', () => {
         { date: '2026-11-23', totalCount: 0, completedCount: 0 },
         { date: '2026-11-24', totalCount: 3, completedCount: 3 },
       ]);
+    });
+
+    // 앱 개발자가 Swagger 만 보고 값의 의미를 알 수 있게 — 설명이 빠진 필드 · 파라미터가 없어야 한다
+    it('모든 DTO 필드에 한 줄 설명이 있다', () => {
+      const missing = Object.entries(doc.components.schemas ?? {}).flatMap(
+        ([schema, { properties }]) =>
+          Object.entries(properties ?? {})
+            .filter(([, prop]) => !prop.description?.trim())
+            .map(([field]) => `${schema}.${field}`),
+      );
+      const multiLine = Object.entries(doc.components.schemas ?? {}).flatMap(
+        ([schema, { properties }]) =>
+          Object.entries(properties ?? {})
+            .filter(([, prop]) => prop.description?.includes('\n'))
+            .map(([field]) => `${schema}.${field}`),
+      );
+
+      expect({ missing, multiLine }).toEqual({ missing: [], multiLine: [] });
+    });
+
+    it('모든 경로 · 쿼리 파라미터에 설명이 있다', () => {
+      const missing = Object.entries(doc.paths).flatMap(([path, ops]) =>
+        Object.entries(ops).flatMap(([method, op]) =>
+          (op.parameters ?? [])
+            .filter((p) => !p.description?.trim())
+            .map((p) => `${method.toUpperCase()} ${path} ${p.in}:${p.name}`),
+        ),
+      );
+
+      expect(missing).toEqual([]);
+    });
+
+    it('날짜 필드는 정한 설명을 쓴다', () => {
+      const props = (schema: string) =>
+        doc.components.schemas?.[schema]?.properties ?? {};
+      const param = (path: string, name: string) =>
+        doc.paths[path]?.get?.parameters?.find((p) => p.name === name)
+          ?.description;
+
+      expect({
+        date: param('/todos', 'date'),
+        createDueDate: props('CreateTodoDto').dueDate?.description,
+        startDate: param('/todos/stats', 'startDate'),
+        endDate: param('/todos/stats', 'endDate'),
+        title: props('CreateTodoDto').title?.description,
+        updateTitle: props('UpdateTodoDto').title?.description,
+      }).toEqual({
+        date: '할 일 목록 조회 날짜',
+        createDueDate: '할 일 등록 날짜',
+        startDate: '할 일 조회 시작 날짜(YYYY-MM-DD)',
+        endDate: '할 일 조회 마지막 날짜(YYYY-MM-DD)',
+        title: '할 일 제목(HTML 제거 후 1~250자, 공백 거부)',
+        updateTitle: '할 일 제목(HTML 제거 후 1~250자, 공백 거부)',
+      });
     });
 
     it('Bearer 인증 스키마를 등록한다', () => {

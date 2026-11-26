@@ -19,6 +19,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -49,6 +50,12 @@ import { TodoIdPipe } from './todo-id.pipe';
 const NOT_FOUND = {
   type: ErrorBodyDto,
   description: 'TODO_NOT_FOUND — 없음 · 타인 소유 · 소프트 삭제 (403 아님)',
+};
+
+const TODO_ID_PARAM = {
+  name: 'todoId',
+  format: 'uuid',
+  description: '대상 할 일 ID. 없거나 남의 것이면 404',
 };
 
 @ApiTags('todos')
@@ -141,6 +148,7 @@ export class TodosController {
     type: ErrorBodyDto,
     description: 'VALIDATION_FAILED',
   })
+  @ApiParam(TODO_ID_PARAM)
   @ApiNotFoundResponse(NOT_FOUND)
   update(
     @CurrentUserId() userId: string,
@@ -161,6 +169,7 @@ export class TodosController {
     type: ErrorBodyDto,
     description: 'VALIDATION_FAILED',
   })
+  @ApiParam(TODO_ID_PARAM)
   @ApiNotFoundResponse(NOT_FOUND)
   completion(
     @CurrentUserId() userId: string,
@@ -178,6 +187,7 @@ export class TodosController {
       '7일 보존 후 정리 배치가 하드 삭제. 멱등 — 이미 삭제한 내 할 일도 204',
   })
   @ApiNoContentResponse({ description: '삭제됨' })
+  @ApiParam(TODO_ID_PARAM)
   @ApiNotFoundResponse(NOT_FOUND)
   remove(
     @CurrentUserId() userId: string,
@@ -194,6 +204,7 @@ export class TodosController {
       '같은 행을 되살려 목록 위치가 유지된다. 멱등 — 이미 살아 있으면 그대로 200',
   })
   @ApiOkResponse({ type: TodoResponseDto })
+  @ApiParam(TODO_ID_PARAM)
   @ApiNotFoundResponse(NOT_FOUND)
   restore(
     @CurrentUserId() userId: string,

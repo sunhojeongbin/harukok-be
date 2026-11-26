@@ -5,20 +5,20 @@ import {
 } from '../../auth/social/social-identity';
 
 export class UserMeResponseDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiProperty({ format: 'uuid', description: '사용자 ID' })
   id: string;
 
   @ApiProperty({
     type: String,
     nullable: true,
-    description: '없으면 NULL (애플 미제공 등). 화면 기본 문구는 앱이 정한다',
+    description: '소셜 계정에서 받은 이름. 없으면 NULL',
   })
   name: string | null;
 
   @ApiProperty({
     type: String,
     nullable: true,
-    description: '없으면 NULL (애플 relay·미제공, 카카오 동의 거부)',
+    description: '소셜 계정에서 받은 이메일(소문자). 없으면 NULL',
   })
   email: string | null;
 
@@ -29,6 +29,10 @@ export class UserMeResponseDto {
   })
   provider: SocialProvider;
 
-  @ApiProperty({ type: String, format: 'date-time' })
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    description: '가입한 시각 (ISO 8601)',
+  })
   createdAt: string;
 }
