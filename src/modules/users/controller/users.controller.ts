@@ -19,7 +19,7 @@ import {
   AccessTokenGuard,
   CurrentUserId,
 } from '../../../common/auth/access-token.guard';
-import { ErrorBodyDto } from '../../../common/swagger/error-body.dto';
+import { ErrorResponseDto } from '../../../common/swagger/error-response.dto';
 import { UserMeResponseDto } from '../dto/user-me.response.dto';
 import { GetMeUseCase } from '../usecases/get-me.usecase';
 import { WithdrawUseCase } from '../usecases/withdraw.usecase';
@@ -28,11 +28,11 @@ import { WithdrawUseCase } from '../usecases/withdraw.usecase';
 @ApiBearerAuth()
 @UseGuards(AccessTokenGuard)
 @ApiUnauthorizedResponse({
-  type: ErrorBodyDto,
+  type: ErrorResponseDto,
   description: 'ACCESS_TOKEN_INVALID',
 })
 @ApiNotFoundResponse({
-  type: ErrorBodyDto,
+  type: ErrorResponseDto,
   description: 'USER_NOT_FOUND — 탈퇴 후 남은 액세스 토큰',
 })
 @Controller('users')

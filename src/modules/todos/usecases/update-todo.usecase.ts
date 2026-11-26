@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { BusinessException } from '../../../common/errors/business.exception';
-import type { TodoResponseDto, UpdateTodoDto } from '../dto/todo.dto';
+import type { TodoResponseDto, UpdateTodoRequestDto } from '../dto/todo.dto';
 import { toTodoResponse } from '../dto/todo.mapper';
 import { TodosErrors } from '../errors/todos.errors';
 import { TODOS_STORE, type TodosStore } from '../repositories/todos.store';
@@ -13,7 +13,7 @@ export class UpdateTodoUseCase {
   async execute(
     userId: string,
     todoId: string,
-    body: UpdateTodoDto,
+    body: UpdateTodoRequestDto,
   ): Promise<TodoResponseDto> {
     const todo = await this.store.update(userId, todoId, body.title);
     if (!todo) throw new BusinessException(TodosErrors.TODO_NOT_FOUND);

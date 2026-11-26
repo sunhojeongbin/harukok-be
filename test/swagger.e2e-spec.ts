@@ -16,10 +16,37 @@ interface OpenApiDoc {
         responses: Record<string, unknown>;
         tags?: string[];
         security?: Record<string, string[]>[];
+        parameters?: {
+          name: string;
+          in: string;
+          description?: string;
+          example?: unknown;
+          schema?: { example?: unknown };
+        }[];
       }
     >
   >;
-  components: { securitySchemes?: Record<string, { scheme?: string }> };
+  components: {
+    securitySchemes?: Record<string, { scheme?: string }>;
+    schemas?: Record<
+      string,
+      {
+        enum?: string[];
+        properties?: Record<
+          string,
+          {
+            description?: string;
+            example?: unknown;
+            maxLength?: number;
+            enum?: string[];
+            type?: string;
+            $ref?: string;
+            allOf?: { $ref?: string }[];
+          }
+        >;
+      }
+    >;
+  };
 }
 
 describe('Swagger /docs (e2e)', () => {
@@ -143,6 +170,167 @@ describe('Swagger /docs (e2e)', () => {
         { date: '2026-11-23', totalCount: 0, completedCount: 0 },
         { date: '2026-11-24', totalCount: 3, completedCount: 3 },
       ]);
+    });
+
+    // 앱 개발자가 Swagger 만 보고 값의 의미를 알 수 있게 — 설명이 빠진 필드 · 파라미터가 없어야 한다
+    it('모든 DTO 필드에 한 줄 설명이 있다', () => {
+      const missing = Object.entries(doc.components.schemas ?? {}).flatMap(
+        ([schema, { properties }]) =>
+          Object.entries(properties ?? {})
+            .filter(([, prop]) => !prop.description?.trim())
+            .map(([field]) => `${schema}.${field}`),
+      );
+      const multiLine = Object.entries(doc.components.schemas ?? {}).flatMap(
+        ([schema, { properties }]) =>
+          Object.entries(properties ?? {})
+            .filter(([, prop]) => prop.description?.includes('\n'))
+            .map(([field]) => `${schema}.${field}`),
+      );
+
+      expect({ missing, multiLine }).toEqual({ missing: [], multiLine: [] });
+    });
+
+    it('모든 경로 · 쿼리 파라미터에 설명이 있다', () => {
+      const missing = Object.entries(doc.paths).flatMap(([path, ops]) =>
+        Object.entries(ops).flatMap(([method, op]) =>
+          (op.parameters ?? [])
+            .filter((p) => !p.description?.trim())
+            .map((p) => `${method.toUpperCase()} ${path} ${p.in}:${p.name}`),
+        ),
+      );
+
+      expect(missing).toEqual([]);
+    });
+
+    it('날짜 필드는 정한 설명을 쓴다', () => {
+      const props = (schema: string) =>
+        doc.components.schemas?.[schema]?.properties ?? {};
+      const param = (path: string, name: string) =>
+        doc.paths[path]?.get?.parameters?.find((p) => p.name === name)
+          ?.description;
+
+      expect({
+        date: param('/todos', 'date'),
+        createDueDate: props('CreateTodoRequestDto').dueDate?.description,
+        startDate: param('/todos/stats', 'startDate'),
+        endDate: param('/todos/stats', 'endDate'),
+        title: props('CreateTodoRequestDto').title?.description,
+        updateTitle: props('UpdateTodoRequestDto').title?.description,
+      }).toEqual({
+        date: '할 일 목록 조회 날짜',
+        createDueDate: '할 일 등록 날짜',
+        startDate: '할 일 조회 시작 날짜(YYYY-MM-DD)',
+        endDate: '할 일 조회 마지막 날짜(YYYY-MM-DD)',
+        title: '할 일 제목(HTML 제거 후 1~250자, 공백 거부)',
+        updateTitle: '할 일 제목(HTML 제거 후 1~250자, 공백 거부)',
+      });
+    });
+
+    const prop = (schema: string, field: string) =>
+      doc.components.schemas?.[schema]?.properties?.[field];
+
+    // 요청에 직접 입력하는 값 — 예시가 없으면 Swagger UI 에 "string" 만 보인다 (enum · boolean 은 UI 가 채운다)
+    it('요청 DTO 의 문자열 필드에는 예시가 있다', () => {
+      const requests = [
+        'SocialLoginRequestDto',
+        'SessionRequestDto',
+        'CreateTodoRequestDto',
+        'UpdateTodoRequestDto',
+      ];
+      const missing = requests.flatMap((schema) =>
+        Object.entries(doc.components.schemas?.[schema]?.properties ?? {})
+          .filter(
+            ([, p]) =>
+              p.type === 'string' && !p.enum && p.example === undefined,
+          )
+          .map(([field]) => `${schema}.${field}`),
+      );
+
+      expect(missing).toEqual([]);
+    });
+
+    it('응답의 자유 텍스트 · 토큰 필드에는 예시가 있다', () => {
+      const fields: [string, string][] = [
+        ['TodoResponseDto', 'title'],
+        ['LoginUserDto', 'name'],
+        ['UserMeResponseDto', 'name'],
+        ['UserMeResponseDto', 'email'],
+        ['SocialLoginResponseDto', 'accessToken'],
+        ['SocialLoginResponseDto', 'refreshToken'],
+        ['RefreshTokenResponseDto', 'accessToken'],
+        ['RefreshTokenResponseDto', 'refreshToken'],
+      ];
+
+      expect(
+        fields
+          .filter(([s, f]) => prop(s, f)?.example === undefined)
+          .map(([s, f]) => `${s}.${f}`),
+      ).toEqual([]);
+    });
+
+    it('검증의 최대 길이를 문서에도 적는다', () => {
+      expect({
+        idToken: prop('SocialLoginRequestDto', 'idToken')?.maxLength,
+        authorizationCode: prop('SocialLoginRequestDto', 'authorizationCode')
+          ?.maxLength,
+        name: prop('SocialLoginRequestDto', 'name')?.maxLength,
+        refreshToken: prop('SessionRequestDto', 'refreshToken')?.maxLength,
+        deviceId: prop('SessionRequestDto', 'deviceId')?.maxLength,
+      }).toEqual({
+        idToken: 8192,
+        authorizationCode: 4096,
+        name: 500,
+        refreshToken: 128,
+        deviceId: 128,
+      });
+    });
+
+    it('deviceId 설명에 공백만은 거부한다고 적는다', () => {
+      for (const schema of ['SocialLoginRequestDto', 'SessionRequestDto']) {
+        expect(prop(schema, 'deviceId')?.description).toMatch(/공백/);
+      }
+    });
+
+    it('소셜 제공자 enum 은 공유 스키마 SocialProvider 하나로 참조한다', () => {
+      const refOf = (schema: string, field: string) => {
+        const p = prop(schema, field);
+        return p?.$ref ?? p?.allOf?.[0]?.$ref;
+      };
+
+      expect(doc.components.schemas?.SocialProvider?.enum).toEqual([
+        'KAKAO',
+        'APPLE',
+        'GOOGLE',
+      ]);
+      expect([
+        refOf('SocialLoginRequestDto', 'provider'),
+        refOf('LoginUserDto', 'provider'),
+        refOf('UserMeResponseDto', 'provider'),
+      ]).toEqual(Array(3).fill('#/components/schemas/SocialProvider'));
+    });
+
+    // 이름만 보고 용도를 알 수 있게 — 요청은 …RequestDto, 응답은 …ResponseDto (쿼리 DTO 는 스키마가 아니라 파라미터로 풀린다)
+    it('DTO 스키마 이름은 RequestDto · ResponseDto 규칙을 따른다', () => {
+      expect(Object.keys(doc.components.schemas ?? {}).sort()).toEqual(
+        [
+          'ChangeCompletionRequestDto',
+          'CompletionResponseDto',
+          'CreateTodoRequestDto',
+          'ErrorResponseDto',
+          'HealthResponseDto',
+          'LoginUserDto',
+          'RefreshTokenResponseDto',
+          'SessionRequestDto',
+          'SocialLoginRequestDto',
+          'SocialLoginResponseDto',
+          'SocialProvider',
+          'TermResponseDto',
+          'TodoResponseDto',
+          'TodoStatsDayResponseDto',
+          'UpdateTodoRequestDto',
+          'UserMeResponseDto',
+        ].sort(),
+      );
     });
 
     it('Bearer 인증 스키마를 등록한다', () => {

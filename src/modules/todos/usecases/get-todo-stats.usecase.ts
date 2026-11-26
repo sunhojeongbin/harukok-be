@@ -1,7 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { BusinessException } from '../../../common/errors/business.exception';
 import { CommonErrors } from '../../../common/errors/common.errors';
-import type { TodoStatsDayDto, TodoStatsQueryDto } from '../dto/todo.dto';
+import type {
+  TodoStatsDayResponseDto,
+  TodoStatsQueryDto,
+} from '../dto/todo.dto';
 import { TODOS_STORE, type TodosStore } from '../repositories/todos.store';
 
 /** 월간 6주 그리드 — 화면에 필요한 최대 범위 (API 설계서 5-7) */
@@ -24,7 +27,7 @@ export class GetTodoStatsUseCase {
   async execute(
     userId: string,
     { startDate, endDate }: TodoStatsQueryDto,
-  ): Promise<TodoStatsDayDto[]> {
+  ): Promise<TodoStatsDayResponseDto[]> {
     const days = inclusiveDays(startDate, endDate);
     if (days < 1 || days > MAX_STATS_DAYS) {
       throw new BusinessException(CommonErrors.VALIDATION_FAILED);

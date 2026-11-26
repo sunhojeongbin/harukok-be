@@ -19,7 +19,7 @@ import {
   AccessTokenGuard,
   CurrentUserId,
 } from '../../../common/auth/access-token.guard';
-import { ErrorBodyDto } from '../../../common/swagger/error-body.dto';
+import { ErrorResponseDto } from '../../../common/swagger/error-response.dto';
 import { RefreshTokenResponseDto, SessionRequestDto } from '../dto/session.dto';
 import { SocialLoginRequestDto } from '../dto/social-login.request.dto';
 import { SocialLoginResponseDto } from '../dto/social-login.response.dto';
@@ -45,11 +45,11 @@ export class AuthController {
   })
   @ApiOkResponse({ type: SocialLoginResponseDto })
   @ApiBadRequestResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description: 'VALIDATION_FAILED',
   })
   @ApiUnauthorizedResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description: 'SOCIAL_TOKEN_INVALID',
   })
   login(@Body() body: SocialLoginRequestDto): Promise<SocialLoginResponseDto> {
@@ -65,11 +65,11 @@ export class AuthController {
   })
   @ApiOkResponse({ type: RefreshTokenResponseDto })
   @ApiBadRequestResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description: 'VALIDATION_FAILED',
   })
   @ApiUnauthorizedResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description:
       'REFRESH_TOKEN_INVALID(없음·기기 불일치) · REFRESH_TOKEN_REVOKED(재사용) · REFRESH_TOKEN_EXPIRED',
   })
@@ -88,11 +88,11 @@ export class AuthController {
   })
   @ApiNoContentResponse({ description: '폐기됨' })
   @ApiBadRequestResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description: 'VALIDATION_FAILED',
   })
   @ApiUnauthorizedResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description:
       'ACCESS_TOKEN_INVALID(Bearer) · REFRESH_TOKEN_INVALID(없음·다른 사용자·기기 불일치)',
   })

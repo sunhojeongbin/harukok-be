@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { BusinessException } from '../../../common/errors/business.exception';
 import type {
-  ChangeCompletionDto,
+  ChangeCompletionRequestDto,
   CompletionResponseDto,
 } from '../dto/todo.dto';
 import { TodosErrors } from '../errors/todos.errors';
@@ -15,7 +15,7 @@ export class ChangeCompletionUseCase {
   async execute(
     userId: string,
     todoId: string,
-    body: ChangeCompletionDto,
+    body: ChangeCompletionRequestDto,
   ): Promise<CompletionResponseDto> {
     const result = await this.store.setCompleted(
       userId,

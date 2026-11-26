@@ -5,8 +5,8 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { ErrorBodyDto } from '../../../common/swagger/error-body.dto';
-import { HealthResultDto } from '../dto/health-result.dto';
+import { ErrorResponseDto } from '../../../common/swagger/error-response.dto';
+import { HealthResponseDto } from '../dto/health-response.dto';
 import {
   CheckHealthUseCase,
   HealthResult,
@@ -19,9 +19,9 @@ export class HealthController {
 
   @Get()
   @ApiOperation({ summary: '헬스체크 (DB 연결 포함)' })
-  @ApiOkResponse({ type: HealthResultDto })
+  @ApiOkResponse({ type: HealthResponseDto })
   @ApiServiceUnavailableResponse({
-    type: ErrorBodyDto,
+    type: ErrorResponseDto,
     description: 'DB_UNAVAILABLE — DB 오류 또는 2초 초과',
   })
   check(): Promise<HealthResult> {
