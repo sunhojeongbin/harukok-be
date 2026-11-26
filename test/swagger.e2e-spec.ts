@@ -134,6 +134,17 @@ describe('Swagger /docs (e2e)', () => {
       expect(del?.security).toEqual([{ bearer: [] }]);
     });
 
+    it('GET /todos/stats 200 응답 예시는 날짜 3개짜리 배열이다 (할 일이 없는 날 0 · 0 포함)', () => {
+      const ok = doc.paths['/todos/stats']?.get?.responses['200'] as
+        { content?: Record<string, { example?: unknown }> } | undefined;
+
+      expect(ok?.content?.['application/json']?.example).toEqual([
+        { date: '2026-11-22', totalCount: 2, completedCount: 1 },
+        { date: '2026-11-23', totalCount: 0, completedCount: 0 },
+        { date: '2026-11-24', totalCount: 3, completedCount: 3 },
+      ]);
+    });
+
     it('Bearer 인증 스키마를 등록한다', () => {
       expect(doc.components.securitySchemes?.bearer?.scheme).toBe('bearer');
     });

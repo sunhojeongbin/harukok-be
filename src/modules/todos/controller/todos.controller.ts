@@ -33,8 +33,8 @@ import {
   CreateTodoDto,
   ListTodosQueryDto,
   TodoResponseDto,
+  TodoStatsDayDto,
   TodoStatsQueryDto,
-  TodoStatsResponseDto,
   UpdateTodoDto,
 } from '../dto/todo.dto';
 import { ChangeCompletionUseCase } from '../usecases/change-completion.usecase';
@@ -75,9 +75,17 @@ export class TodosController {
   @ApiOperation({
     summary: '홈 달력 날짜별 할 일 개수 · 완료 개수 (주간 · 월간 공용)',
     description:
-      '앱이 화면에 보이는 첫날 ~ 마지막날을 보낸다. 범위의 모든 날짜를 오름차순으로, 할 일이 없는 날도 0 · 0',
+      '앱이 화면에 보이는 첫날 ~ 마지막날을 보낸다. 범위의 모든 날짜를 오름차순 배열로, 할 일이 없는 날도 0 · 0',
   })
-  @ApiOkResponse({ type: TodoStatsResponseDto })
+  @ApiOkResponse({
+    type: [TodoStatsDayDto],
+    // 배열 예시는 기본으로 1개만 보인다 — 날짜 3개(할 일 없는 날 포함)로 보여 준다
+    example: [
+      { date: '2026-11-22', totalCount: 2, completedCount: 1 },
+      { date: '2026-11-23', totalCount: 0, completedCount: 0 },
+      { date: '2026-11-24', totalCount: 3, completedCount: 3 },
+    ],
+  })
   @ApiBadRequestResponse({
     type: ErrorBodyDto,
     description:
@@ -86,7 +94,7 @@ export class TodosController {
   stats(
     @CurrentUserId() userId: string,
     @Query() query: TodoStatsQueryDto,
-  ): Promise<TodoStatsResponseDto> {
+  ): Promise<TodoStatsDayDto[]> {
     return this.todoStats.execute(userId, query);
   }
 

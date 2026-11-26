@@ -213,12 +213,6 @@ describe('할 일 (e2e)', () => {
 
   describe('GET /todos/stats', () => {
     type Day = { date: string; totalCount: number; completedCount: number };
-    type Stats = {
-      startDate: string;
-      endDate: string;
-      summary: { totalCount: number; completedCount: number };
-      days: Day[];
-    };
 
     const stats = (
       query: Record<string, string>,
@@ -228,10 +222,10 @@ describe('할 일 (e2e)', () => {
       return token ? req.set(auth(token)) : req;
     };
 
-    async function statsOk(startDate: string, endDate: string): Promise<Stats> {
+    async function statsOk(startDate: string, endDate: string): Promise<Day[]> {
       const res = await stats({ startDate, endDate });
       expect(res.status).toBe(200);
-      return res.body as Stats;
+      return res.body as Day[];
     }
 
     const complete = (id: string) =>
@@ -240,7 +234,8 @@ describe('할 일 (e2e)', () => {
         .set(auth(me.token))
         .send({ completed: true });
 
-    it('200: 범위의 모든 날짜를 오름차순, 할 일이 없는 날은 0 · 0, 명세에 없는 필드 없음', async () => {
+    // 2026-11-26 명세 변경: 최상위가 날짜별 배열 — 감싸는 객체 · startDate · endDate · summary 없음
+    it('200: 날짜별 배열 — 범위의 모든 날짜를 오름차순, 할 일이 없는 날은 0 · 0, 명세에 없는 필드 없음', async () => {
       const a = await create('a', '2026-11-22');
       await create('b', '2026-11-22');
       await create('c', '2026-11-24');
@@ -248,17 +243,13 @@ describe('할 일 (e2e)', () => {
 
       const body = await statsOk('2026-11-22', '2026-11-25');
 
-      expect(body).toEqual({
-        startDate: '2026-11-22',
-        endDate: '2026-11-25',
-        summary: { totalCount: 3, completedCount: 1 },
-        days: [
-          { date: '2026-11-22', totalCount: 2, completedCount: 1 },
-          { date: '2026-11-23', totalCount: 0, completedCount: 0 },
-          { date: '2026-11-24', totalCount: 1, completedCount: 0 },
-          { date: '2026-11-25', totalCount: 0, completedCount: 0 },
-        ],
-      });
+      expect(Array.isArray(body)).toBe(true);
+      expect(body).toEqual([
+        { date: '2026-11-22', totalCount: 2, completedCount: 1 },
+        { date: '2026-11-23', totalCount: 0, completedCount: 0 },
+        { date: '2026-11-24', totalCount: 1, completedCount: 0 },
+        { date: '2026-11-25', totalCount: 0, completedCount: 0 },
+      ]);
     });
 
     it('남의 할 일은 세지 않는다', async () => {
@@ -268,8 +259,7 @@ describe('할 일 (e2e)', () => {
 
       const body = await statsOk('2026-11-22', '2026-11-23');
 
-      expect(body.days.map((d) => d.totalCount)).toEqual([1, 0]);
-      expect(body.summary.totalCount).toBe(1);
+      expect(body.map((d) => d.totalCount)).toEqual([1, 0]);
     });
 
     it('소프트 삭제한 할 일은 세지 않는다 (완료된 것도)', async () => {
@@ -279,7 +269,7 @@ describe('할 일 (e2e)', () => {
       await complete(gone.id);
       await http().delete(`/todos/${gone.id}`).set(auth(me.token));
 
-      expect((await statsOk('2026-11-22', '2026-11-22')).days).toEqual([
+      expect(await statsOk('2026-11-22', '2026-11-22')).toEqual([
         { date: '2026-11-22', totalCount: 1, completedCount: 1 },
       ]);
     });
@@ -295,7 +285,7 @@ describe('할 일 (e2e)', () => {
         .set(auth(me.token))
         .send({ completed: false });
 
-      expect((await statsOk('2026-11-22', '2026-11-22')).days[0]).toEqual({
+      expect((await statsOk('2026-11-22', '2026-11-22'))[0]).toEqual({
         date: '2026-11-22',
         totalCount: 3,
         completedCount: 1,
@@ -314,10 +304,10 @@ describe('할 일 (e2e)', () => {
 
       const body = await statsOk('2026-10-26', '2026-12-06');
 
-      expect(body.days).toHaveLength(42);
-      expect(body.days[0].date).toBe('2026-10-26');
-      expect(body.days[41].date).toBe('2026-12-06');
-      const counted = body.days
+      expect(body).toHaveLength(42);
+      expect(body[0].date).toBe('2026-10-26');
+      expect(body[41].date).toBe('2026-12-06');
+      const counted = body
         .filter((d) => d.totalCount > 0)
         .map((d) => [d.date, d.totalCount, d.completedCount]);
       expect(counted).toEqual([
@@ -329,28 +319,8 @@ describe('할 일 (e2e)', () => {
       ]);
     });
 
-    it('summary 는 days 합계와 같다', async () => {
-      for (const [i, date] of [
-        '2026-11-22',
-        '2026-11-22',
-        '2026-11-25',
-        '2026-11-28',
-      ].entries()) {
-        const t = await create(`t${i}`, date);
-        if (i % 2 === 0) await complete(t.id);
-      }
-
-      const body = await statsOk('2026-11-22', '2026-11-28');
-
-      expect(body.summary).toEqual({
-        totalCount: body.days.reduce((n, d) => n + d.totalCount, 0),
-        completedCount: body.days.reduce((n, d) => n + d.completedCount, 0),
-      });
-      expect(body.summary).toEqual({ totalCount: 4, completedCount: 2 });
-    });
-
-    it('하루(startDate == endDate) 는 200, days 1개', async () => {
-      expect((await statsOk('2026-11-22', '2026-11-22')).days).toEqual([
+    it('하루(startDate == endDate) 는 200, 원소 1개', async () => {
+      expect(await statsOk('2026-11-22', '2026-11-22')).toEqual([
         { date: '2026-11-22', totalCount: 0, completedCount: 0 },
       ]);
     });

@@ -20,7 +20,8 @@ async function expectValidationFailed(promise: Promise<unknown>) {
 }
 
 describe('GetTodoStatsUseCase', () => {
-  it('성공: { startDate, endDate, summary, days } — summary 는 days 합계', async () => {
+  // 2026-11-26 명세 변경: 감싸는 객체 · startDate · endDate · summary 없이 날짜별 배열만
+  it('성공: 날짜별 배열을 그대로 돌려준다', async () => {
     const store = fakeStore({ countByDate: jest.fn().mockResolvedValue(DAYS) });
 
     await expect(
@@ -28,15 +29,10 @@ describe('GetTodoStatsUseCase', () => {
         startDate: '2026-11-22',
         endDate: '2026-11-24',
       }),
-    ).resolves.toEqual({
-      startDate: '2026-11-22',
-      endDate: '2026-11-24',
-      summary: { totalCount: 5, completedCount: 3 },
-      days: DAYS,
-    });
+    ).resolves.toEqual(DAYS);
   });
 
-  it('NOT_FOUND 계열: 할 일이 없어도 404 가 아니다 — 0 으로 채운 days, summary 0', async () => {
+  it('NOT_FOUND 계열: 할 일이 없어도 404 가 아니다 — 0 으로 채운 배열', async () => {
     const empty = [{ date: '2026-11-22', totalCount: 0, completedCount: 0 }];
     const store = fakeStore({
       countByDate: jest.fn().mockResolvedValue(empty),
@@ -47,10 +43,7 @@ describe('GetTodoStatsUseCase', () => {
         startDate: '2026-11-22',
         endDate: '2026-11-22',
       }),
-    ).resolves.toMatchObject({
-      summary: { totalCount: 0, completedCount: 0 },
-      days: empty,
-    });
+    ).resolves.toEqual(empty);
   });
 
   it('권한: Bearer 사용자 ID 와 기간을 저장소에 넘긴다', async () => {

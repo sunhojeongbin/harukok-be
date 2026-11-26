@@ -98,15 +98,15 @@
 
 ### 할 일 — `/todos` (Bearer)
 
-| 요청                                                       | 본문 · 쿼리                                      | 응답                                                                            |
-| ---------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `GET /todos?date=2026-11-17`                               | —                                                | 200 그 날짜 목록 (생성순, 삭제한 것 제외)                                       |
-| `POST /todos`                                              | `{ "title": "장보기", "dueDate": "2026-11-17" }` | 201                                                                             |
-| `PATCH /todos/{todoId}`                                    | `{ "title": "..." }`                             | 200. 날짜는 수정 불가 — `dueDate` 를 보내면 400                                 |
-| `PATCH /todos/{todoId}/completion`                         | `{ "completed": true }`                          | 200 `{ id, completedAt }` — 다시 보내도 처음 완료 시각 유지                     |
-| `DELETE /todos/{todoId}`                                   | —                                                | 204 (다시 보내도 204)                                                           |
-| `POST /todos/{todoId}/restore`                             | —                                                | 200 되살린 할 일 (같은 자리로 돌아온다)                                         |
-| `GET /todos/stats?startDate=2026-10-26&endDate=2026-12-06` | —                                                | 200 `{ startDate, endDate, summary, days }` — 범위의 모든 날짜, 없는 날은 0 · 0 |
+| 요청                                                       | 본문 · 쿼리                                      | 응답                                                                             |
+| ---------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `GET /todos?date=2026-11-17`                               | —                                                | 200 그 날짜 목록 (생성순, 삭제한 것 제외)                                        |
+| `POST /todos`                                              | `{ "title": "장보기", "dueDate": "2026-11-17" }` | 201                                                                              |
+| `PATCH /todos/{todoId}`                                    | `{ "title": "..." }`                             | 200. 날짜는 수정 불가 — `dueDate` 를 보내면 400                                  |
+| `PATCH /todos/{todoId}/completion`                         | `{ "completed": true }`                          | 200 `{ id, completedAt }` — 다시 보내도 처음 완료 시각 유지                      |
+| `DELETE /todos/{todoId}`                                   | —                                                | 204 (다시 보내도 204)                                                            |
+| `POST /todos/{todoId}/restore`                             | —                                                | 200 되살린 할 일 (같은 자리로 돌아온다)                                          |
+| `GET /todos/stats?startDate=2026-10-26&endDate=2026-12-06` | —                                                | 200 `[{ date, totalCount, completedCount }]` — 범위의 모든 날짜, 없는 날은 0 · 0 |
 
 - `dueDate`·`date`·`startDate`·`endDate` 는 `YYYY-MM-DD` 만 — `2026-11-17T00:00:00+09:00`, `2026-02-30` 은 400
 - 달력 현황은 `startDate ≤ endDate`, 양 끝 포함 최대 42일 (월간 6주 그리드). 넘으면 400

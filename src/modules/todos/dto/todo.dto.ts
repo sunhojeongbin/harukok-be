@@ -97,32 +97,14 @@ export class TodoStatsQueryDto {
   endDate: string;
 }
 
-export class TodoStatsCountDto {
-  @ApiProperty({ example: 5 })
-  totalCount: number;
-
-  @ApiProperty({ example: 3 })
-  completedCount: number;
-}
-
-export class TodoStatsDayDto extends TodoStatsCountDto {
+/** 날짜별 개수 — GET /todos/stats 는 이 배열만 내려준다 (감싸는 객체 · 기간 · 합계 없음) */
+export class TodoStatsDayDto {
   @ApiProperty({ example: '2026-11-22' })
   date: string;
-}
 
-export class TodoStatsResponseDto {
-  @ApiProperty({ example: '2026-11-22' })
-  startDate: string;
+  @ApiProperty({ example: 2 })
+  totalCount: number;
 
-  @ApiProperty({ example: '2026-11-28' })
-  endDate: string;
-
-  @ApiProperty({ type: TodoStatsCountDto, description: 'days 합계' })
-  summary: TodoStatsCountDto;
-
-  @ApiProperty({
-    type: [TodoStatsDayDto],
-    description: '범위의 모든 날짜 오름차순. 할 일이 없는 날도 0 · 0',
-  })
-  days: TodoStatsDayDto[];
+  @ApiProperty({ example: 1 })
+  completedCount: number;
 }
